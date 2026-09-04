@@ -28,6 +28,7 @@ func userJSON(u *model.User) gin.H {
 		"isSetupComplete":  u.IsSetupComplete,
 		"role":             u.Role,
 		"isActive":         u.IsActive,
+		"signature":        u.Signature,
 	}
 }
 
@@ -80,16 +81,14 @@ func (h *Handler) Login(c *gin.Context) {
 	c.JSON(200, gin.H{"token": token, "user": userJSON(&u)})
 }
 
-// Register 注册（JSON: email/password/displayName）。注册开关关闭时拒绝。
+// Register 注册（JSON: email/password/displayName，可选 inviteToken）。
+// 系统关闭公开注册后，仅持有有效邀请链接（inviteToken）的用户可以注册。
 func (h *Handler) Register(c *gin.Context) {
-	if h.getSetting(model.SettingRegistrationEnabled, "true") != "true" {
-		fail(c, 403, "系统已暂停新用户注册，请联系管理员")
-		return
-	}
 	var req struct {
 		Email       string `json:"email"`
 		Password    string `json:"password"`
 		DisplayName string `json:"displayName"`
+		InviteToken string `json:"inviteToken"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		badRequest(c, "请求参数有误")
@@ -97,6 +96,7 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	req.DisplayName = strings.TrimSpace(req.DisplayName)
+	req.InviteToken = strings.TrimSpace(req.InviteToken)
 
 	if req.Email == "" || req.Password == "" || req.DisplayName == "" {
 		badRequest(c, "邮箱、密码和昵称均为必填")
@@ -111,9 +111,49 @@ func (h *Handler) Register(c *gin.Context) {
 		badRequest(c, "邮箱格式不正确")
 		return
 	}
+
+	// 若携带邀请令牌，先校验其有效性
+	var invite *model.Invitation
+	if req.InviteToken != "" {
+		var iv model.Invitation
+		if err := h.db.Where("token = ?", req.InviteToken).First(&iv).Error; err != nil {
+			fail(c, 400, "邀请链接无效，请联系管理员")
+			return
+		}
+		invite = &iv
+	}
+
+	// 无邀请时，注册开关关闭则拒绝
+	if invite == nil && h.getSetting(model.SettingRegistrationEnabled, "true") != "true" {
+		fail(c, 403, "系统已暂停新用户注册，请联系管理员邀请你加入")
+		return
+	}
+
+	// 校验邀请状态与邮箱一致性
+	if invite != nil {
+		if invitationExpired(invite.ExpiresAt) {
+			fail(c, 400, "邀请链接已过期，请联系管理员重新邀请")
+			return
+		}
+		switch invite.Status {
+		case model.InviteStatusRegistered:
+			fail(c, 400, "该邀请已被使用，请直接登录")
+			return
+		case model.InviteStatusRevoked:
+			fail(c, 400, "该邀请已被撤销，请联系管理员")
+			return
+		}
+		if invite.Email != req.Email {
+			fail(c, 400, "该邀请链接仅限「"+invite.Email+"」邮箱注册")
+			return
+		}
+	}
+
 	var count int64
 	h.db.Model(&model.User{}).Where("email = ?", req.Email).Count(&count)
 	if count > 0 {
+		// 该邮箱已注册：如有待接受的邀请则同步标记为已使用，保持邀请列表状态准确
+		h.markInviteUsed(req.Email)
 		fail(c, 409, "该邮箱已注册")
 		return
 	}
@@ -133,6 +173,8 @@ func (h *Handler) Register(c *gin.Context) {
 		serverError(c, "注册失败，请稍后重试")
 		return
 	}
+	// 注册成功：将该邮箱的待接受邀请标记为已使用
+	h.markInviteUsed(req.Email)
 	token, err := h.auth.CreateToken(u.ID, u.Email)
 	if err != nil {
 		serverError(c, "生成凭证失败")

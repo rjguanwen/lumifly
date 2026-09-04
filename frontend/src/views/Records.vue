@@ -75,7 +75,7 @@
           <TagInput v-model="form.tagIds" />
         </el-form-item>
         <el-form-item label="附件">
-          <MediaUploader v-model="form.mediaIds" multiple />
+          <MediaUploader v-model="form.mediaIds" :initial-items="form.mediaObjects" multiple />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -112,6 +112,7 @@ const form = reactive({
   weather: '',
   tagIds: [],
   mediaIds: [],
+  mediaObjects: [],
 })
 
 async function load() {
@@ -167,6 +168,7 @@ function fillForm(record) {
   form.weather = record.weather || ''
   form.tagIds = record.tags?.map((t) => t.id) || []
   form.mediaIds = record.media?.map((m) => m.id) || []
+  form.mediaObjects = (record.media || []).map((m) => ({ id: m.id, url: m.url, fileName: m.fileName, mimeType: m.mimeType }))
 }
 
 function editRecord(record) {
@@ -182,6 +184,7 @@ function resetForm() {
   form.mood = null
   form.tagIds = []
   form.mediaIds = []
+  form.mediaObjects = []
   showForm.value = false
   if (route.query.edit) {
     router.replace({ path: '/records', query: { from: route.query.from, to: route.query.to } })

@@ -10,6 +10,22 @@
         <span class="font-semibold">个人资料</span>
       </template>
       <el-form label-position="top">
+        <div class="flex items-center gap-5 mb-6">
+          <UserAvatar :src="auth.user?.avatarUrl" :name="auth.user?.displayName" :size="72" />
+          <div class="space-y-2">
+            <el-button size="small" :loading="avatarUploading" @click="avatarInput?.click()">
+              <el-icon class="mr-1"><Camera /></el-icon>上传 / 更换头像
+            </el-button>
+            <input
+              ref="avatarInput"
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              class="hidden"
+              @change="onAvatarChange"
+            />
+            <p class="text-xs text-gray-400">支持 jpg / png / gif / webp，不超过 5MB</p>
+          </div>
+        </div>
         <el-form-item label="昵称">
           <el-input v-model="form.displayName" />
         </el-form-item>
@@ -22,6 +38,16 @@
         <el-form-item label="预期寿命（年）">
           <el-slider v-model="form.expectedLifespan" :min="50" :max="120" show-input :show-input-controls="false" />
           <p class="text-xs text-gray-400 mt-1">用于生成您的人生日历</p>
+        </el-form-item>
+        <el-form-item label="个性签名">
+          <el-input
+            v-model="form.signature"
+            type="textarea"
+            :rows="2"
+            maxlength="255"
+            show-word-limit
+            placeholder="一句话介绍自己，会展示在你的广场内容中"
+          />
         </el-form-item>
         <el-button type="primary" :loading="saving" @click="saveProfile">保存修改</el-button>
       </el-form>
@@ -121,23 +147,76 @@
         <div>注册时间：{{ registeredAt }}</div>
       </div>
     </el-card>
+
+    <!-- 头像裁剪 -->
+    <AvatarCropper
+      v-model:visible="cropVisible"
+      :image-url="cropImageUrl"
+      :file-name="cropFileName"
+      @cropped="uploadCroppedAvatar"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
-import { authApi } from '../api'
+import UserAvatar from '../components/UserAvatar.vue'
+import AvatarCropper from '../components/AvatarCropper.vue'
+import { authApi, profileApi } from '../api'
 
 const auth = useAuthStore()
 const saving = ref(false)
 const changingPwd = ref(false)
+const avatarUploading = ref(false)
+const avatarInput = ref(null)
+const cropVisible = ref(false)
+const cropImageUrl = ref('')
+const cropFileName = ref('')
+
+async function onAvatarChange(e) {
+  const file = e.target.files?.[0]
+  if (avatarInput.value) avatarInput.value.value = ''
+  if (!file) return
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.warning('图片不能超过 5MB')
+    return
+  }
+  cropFileName.value = file.name
+  cropImageUrl.value = URL.createObjectURL(file)
+  cropVisible.value = true
+}
+
+async function uploadCroppedAvatar(file) {
+  avatarUploading.value = true
+  try {
+    const user = await profileApi.uploadAvatar(file)
+    await auth.applyUser(user)
+    ElMessage.success('头像已更新')
+  } catch {
+    /* 拦截器已提示 */
+  } finally {
+    avatarUploading.value = false
+    releaseCropUrl()
+  }
+}
+
+function releaseCropUrl() {
+  if (cropImageUrl.value) URL.revokeObjectURL(cropImageUrl.value)
+  cropImageUrl.value = ''
+}
+
+// 关闭裁剪框（取消或完成）后释放临时预览 URL
+watch(cropVisible, (v) => {
+  if (!v) releaseCropUrl()
+})
 
 const form = reactive({
   displayName: '',
   birthDate: '',
   expectedLifespan: 80,
+  signature: '',
 })
 
 const pwdForm = reactive({
@@ -150,6 +229,7 @@ if (auth.user) {
   form.displayName = auth.user.displayName
   form.birthDate = auth.user.birthDate || ''
   form.expectedLifespan = auth.user.expectedLifespan || 80
+  form.signature = auth.user.signature || ''
 }
 
 const registeredAt = computed(() => {
@@ -168,6 +248,7 @@ async function saveProfile() {
       displayName: form.displayName,
       birthDate: form.birthDate || null,
       expectedLifespan: form.expectedLifespan,
+      signature: form.signature,
     })
     ElMessage.success('已保存')
   } catch {

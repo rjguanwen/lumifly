@@ -18,6 +18,7 @@
         :birth-date="auth.user.birthDate"
         :lifespan="auth.user.expectedLifespan || 80"
         :summary-data="summaryData"
+        @changed="loadSummary"
       />
       <div v-else class="text-center py-8 text-gray-400">请先在设置中填写出生日期</div>
     </el-card>
@@ -39,11 +40,13 @@ const lifeStats = computed(() => {
   return getLifeStats(auth.user.birthDate, auth.user.expectedLifespan || 80)
 })
 
-onMounted(async () => {
+async function loadSummary() {
   try {
     summaryData.value = await calendarApi.summary()
   } catch {
     /* 忽略 */
   }
-})
+}
+
+onMounted(loadSummary)
 </script>

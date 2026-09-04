@@ -292,10 +292,12 @@ onBeforeUnmount(() => {
   transform: scale(0.96);
 }
 
-/* ===== 富文本编辑区：更宽更大，随内容撑高 ===== */
+/* ===== 富文本编辑区：适中的高度，随内容撑高 ===== */
 .editor-area {
-  min-height: 420px;
-  padding: 18px 20px;
+  min-height: 280px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding: 14px 18px;
 }
 
 /* ===== Markdown 左右分栏 ===== */
@@ -317,19 +319,19 @@ onBeforeUnmount(() => {
 
 .md-pane-input {
   width: 100%;
-  min-height: 440px;
+  min-height: 300px;
   height: auto;
-  max-height: 620px;
+  max-height: 460px;
   overflow-y: auto;
-  padding: 14px 16px;
+  padding: 12px 14px;
   resize: vertical;
 }
 
 .md-pane-preview {
-  min-height: 440px;
-  max-height: 620px;
+  min-height: 300px;
+  max-height: 460px;
   overflow-y: auto;
-  padding: 12px 16px;
+  padding: 12px 14px;
   background: #fafbfd;
   border: 1px solid #eef1f6;
   border-radius: 8px;

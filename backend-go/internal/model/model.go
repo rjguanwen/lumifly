@@ -45,8 +45,92 @@ type User struct {
 	PasswordHint     string  `gorm:"size:128" json:"-"`                     // 密码提示词
 	SecurityQuestion string  `gorm:"size:128" json:"-"`                     // 找回安全问题
 	SecurityAnswer   string  `gorm:"size:128" json:"-"`                     // 安全答案（存小写，不返回）
+	Signature        string  `gorm:"size:255" json:"signature"`             // 个性签名
 	CreatedAt        string  `gorm:"size:40" json:"createdAt"`
 	UpdatedAt        string  `gorm:"size:40" json:"updatedAt"`
+}
+
+// ==================== Books ====================
+
+// 阅读进度
+const (
+	BookStatusNotStarted = "not_started" // 未开始
+	BookStatusReading    = "reading"     // 进行中
+	BookStatusFinished   = "finished"    // 已读完
+	BookStatusAbandoned  = "abandoned"   // 已中止
+)
+
+// Book 读书记录。
+type Book struct {
+	ID        uint   `gorm:"primaryKey" json:"id"`
+	UserID    uint   `gorm:"index;not null" json:"userId"`
+	Name      string `gorm:"size:255;not null" json:"name"`
+	Author    string `gorm:"size:128" json:"author"`
+	Domain    string `gorm:"size:64" json:"domain"` // 所属领域
+	Status    string `gorm:"size:16;default:not_started" json:"status"`
+	Rating    int    `gorm:"default:0" json:"rating"` // 星级 0-5
+	ReadYear  string `gorm:"size:4" json:"readYear"`  // 阅读年份 YYYY
+	Recommend string `gorm:"type:text" json:"recommend"` // 推荐语
+	Review    string `gorm:"type:text" json:"review"`    // 书评（HTML）
+	CreatedAt string `gorm:"size:40" json:"createdAt"`
+	UpdatedAt string `gorm:"size:40" json:"updatedAt"`
+}
+
+// BookTag 书籍-标签关联。
+type BookTag struct {
+	BookID uint `gorm:"primaryKey" json:"bookId"`
+	TagID  uint `gorm:"primaryKey" json:"tagId"`
+}
+
+// BookDomain 书籍所属领域库（用户级，可维护）。
+type BookDomain struct {
+	ID        uint   `gorm:"primaryKey" json:"id"`
+	UserID    uint   `gorm:"uniqueIndex:uk_user_domain;not null" json:"userId"`
+	Name      string `gorm:"size:32;uniqueIndex:uk_user_domain;not null" json:"name"`
+	CreatedAt string `gorm:"size:40" json:"createdAt"`
+}
+
+// ==================== 广场 ====================
+
+// 广场内容来源类型
+const (
+	PubRecord    = "record"    // 日记
+	PubMilestone = "milestone" // 大事记
+	PubIdea      = "idea"      // 想法灵感
+	PubBook      = "book"      // 读书记录（书评）
+)
+
+// Publication 广场发布帖（内容为发布时刻的快照）。
+type Publication struct {
+	ID         uint   `gorm:"primaryKey" json:"id"`
+	UserID     uint   `gorm:"index;not null" json:"userId"`
+	SourceType string `gorm:"size:16;index;not null" json:"sourceType"` // record/milestone/idea/book
+	SourceID   uint   `gorm:"not null" json:"sourceId"`
+	Title      string `gorm:"size:255" json:"title"`
+	Preview    string `gorm:"type:text" json:"preview"` // 纯文本预览（搜索/摘要）
+	Content    string `gorm:"type:text" json:"content"` // HTML 正文快照
+	Author     string `gorm:"size:128" json:"author"`   // 书籍作者等
+	Rating     int    `gorm:"default:0" json:"rating"`  // 书籍星级（其他为 0）
+	Meta       string `gorm:"type:text" json:"meta"`    // 附加 JSON（领域/年份/进度/推荐语等）
+	CreatedAt  string `gorm:"size:40" json:"createdAt"`
+	UpdatedAt  string `gorm:"size:40" json:"updatedAt"`
+}
+
+// PublicationLike 广场点赞（一人一帖一次）。
+type PublicationLike struct {
+	ID            uint `gorm:"primaryKey" json:"id"`
+	PublicationID uint `gorm:"uniqueIndex:uk_pub_user;not null" json:"publicationId"`
+	UserID        uint `gorm:"uniqueIndex:uk_pub_user;not null" json:"userId"`
+	CreatedAt     string `gorm:"size:40" json:"createdAt"`
+}
+
+// PublicationComment 广场评论。
+type PublicationComment struct {
+	ID            uint   `gorm:"primaryKey" json:"id"`
+	PublicationID uint   `gorm:"index;not null" json:"publicationId"`
+	UserID        uint   `gorm:"index;not null" json:"userId"`
+	Content       string `gorm:"size:1000;not null" json:"content"`
+	CreatedAt     string `gorm:"size:40" json:"createdAt"`
 }
 
 // SystemSetting 系统设置（key-value，与用户无关）。
@@ -59,6 +143,27 @@ type SystemSetting struct {
 const (
 	SettingRegistrationEnabled = "registration_enabled" // "true"/"false"
 )
+
+// ==================== 邀请注册 ====================
+
+// 邀请状态
+const (
+	InviteStatusPending    = "pending"    // 待接受
+	InviteStatusRegistered = "registered" // 已注册（链接已被使用）
+	InviteStatusRevoked    = "revoked"    // 已撤销
+)
+
+// Invitation 邀请注册记录（管理员邀请指定邮箱注册）。
+type Invitation struct {
+	ID        uint    `gorm:"primaryKey" json:"id"`
+	Email     string  `gorm:"size:255;uniqueIndex;not null" json:"email"`
+	Token     string  `gorm:"size:64;uniqueIndex;not null" json:"-"` // 随机邀请令牌（仅存库，不回传）
+	InvitedBy uint    `gorm:"not null" json:"invitedBy"`             // 发起邀请的管理员 id
+	Status    string  `gorm:"size:16;default:pending" json:"status"` // pending / registered / revoked
+	ExpiresAt string  `gorm:"size:40;not null" json:"expiresAt"`
+	CreatedAt string  `gorm:"size:40;not null" json:"createdAt"`
+	UsedAt    *string `gorm:"size:40" json:"usedAt"` // 实际完成注册的时间
+}
 
 // ==================== Milestones ====================
 

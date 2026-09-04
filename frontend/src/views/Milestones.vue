@@ -95,7 +95,7 @@
           <RichTextEditor v-model="form.description" placeholder="详细描述这个重要事件，可以用 Markdown 书写..." />
         </el-form-item>
         <el-form-item label="附件">
-          <MediaUploader v-model="form.mediaIds" multiple />
+          <MediaUploader v-model="form.mediaIds" :initial-items="form.mediaObjects" multiple />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -135,6 +135,7 @@ const form = reactive({
   category: 'other',
   importance: 3,
   mediaIds: [],
+  mediaObjects: [],
 })
 
 const filteredItems = computed(() => {
@@ -188,6 +189,7 @@ function fillForm(m) {
   form.category = m.category
   form.importance = m.importance
   form.mediaIds = m.media?.map((x) => x.id) || []
+  form.mediaObjects = (m.media || []).map((x) => ({ id: x.id, url: x.url, fileName: x.fileName, mimeType: x.mimeType }))
 }
 
 function editMilestone(m) {

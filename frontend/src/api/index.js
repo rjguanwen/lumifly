@@ -48,6 +48,7 @@ export const authApi = {
   resetPassword: (data) => api.post('/auth/forgot/reset', data),
   sendForgotEmail: (email) => api.post('/auth/forgot/send', { email }),
   resetByToken: (data) => api.post('/auth/reset', data),
+  inviteInfo: (token) => api.get('/auth/invite/info', { params: { token } }),
 }
 
 // ===== 管理员 =====
@@ -56,11 +57,22 @@ export const adminApi = {
   setUserActive: (id, isActive) => api.patch(`/admin/users/${id}`, { isActive }),
   settings: () => api.get('/admin/settings'),
   setRegistration: (enabled) => api.put('/admin/settings/registration', { enabled }),
+  invites: () => api.get('/admin/invites'),
+  createInvites: (emails) => api.post('/admin/invites', { emails }),
+  revokeInvite: (id) => api.post(`/admin/invites/${id}/revoke`),
 }
 
 // ===== 个人资料 =====
 export const profileApi = {
   update: (data) => api.put('/profile', data),
+  uploadAvatar: (file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.put('/profile/avatar', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000,
+    })
+  },
 }
 
 // ===== 日常记录 =====
@@ -105,6 +117,38 @@ export const tagApi = {
   create: (data) => api.post('/tags', data),
 }
 
+// ===== 读书记录 =====
+export const bookApi = {
+  list: (params) => api.get('/books', { params }),
+  get: (id) => api.get(`/books/${id}`),
+  create: (data) => api.post('/books', data),
+  update: (id, data) => api.put(`/books/${id}`, data),
+  remove: (id) => api.delete(`/books/${id}`),
+}
+
+// ===== 广场 =====
+export const squareApi = {
+  publish: (sourceType, sourceId) => api.post('/publications', { sourceType, sourceId }),
+  unpublish: (id) => api.delete(`/publications/${id}`),
+  mine: () => api.get('/publications/mine'),
+  list: (params) => api.get('/publications', { params }),
+  detail: (id) => api.get(`/publications/${id}`),
+  like: (id) => api.post(`/publications/${id}/like`),
+  comments: (id) => api.get(`/publications/${id}/comments`),
+  addComment: (id, content) => api.post(`/publications/${id}/comments`, { content }),
+  deleteComment: (id) => api.delete(`/publications/comment/${id}`),
+}
+
+// ===== 书籍领域库 =====
+export const bookDomainApi = {
+  list: () => api.get('/book-domains'),
+  create: (name) => api.post('/book-domains', { name }),
+  rename: (id, name) => api.put(`/book-domains/${id}`, { name }),
+  remove: (id) => api.delete(`/book-domains/${id}`),
+}
+
+export const defaultBookDomains = ['文学', '小说', '科幻', '技术', '历史', '哲学', '心理学', '商业', '传记', '艺术', '其他']
+
 // ===== 日历 =====
 export const calendarApi = {
   summary: () => api.get('/calendar/summary'),
@@ -123,4 +167,5 @@ export const uploadApi = {
       timeout: 120000,
     })
   },
+  remove: (id) => api.delete(`/media/${id}`),
 }

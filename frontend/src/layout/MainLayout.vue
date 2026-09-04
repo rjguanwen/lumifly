@@ -36,7 +36,7 @@
       <el-header class="app-header">
         <div class="header-title">{{ route.meta.title || '' }}</div>
         <div class="flex items-center gap-2">
-          <el-avatar :size="28" class="bg-blue-500">{{ (auth.user?.displayName || '?').charAt(0) }}</el-avatar>
+          <UserAvatar :src="auth.user?.avatarUrl" :name="auth.user?.displayName" :size="28" />
           <span class="text-sm text-gray-600">{{ auth.user?.displayName }}</span>
         </div>
       </el-header>
@@ -53,6 +53,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { ElMessageBox } from 'element-plus'
 import BrandLogo from '../components/BrandLogo.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -75,6 +76,8 @@ const navItems = computed(() => {
     { path: '/milestones', label: '大事记', icon: 'Trophy' },
     { path: '/records', label: '日常记录', icon: 'EditPen' },
     { path: '/ideas', label: '想法灵感', icon: 'Lightning' },
+    { path: '/books', label: '读书记录', icon: 'Collection' },
+    { path: '/square', label: '广场', icon: 'Compass' },
   ]
   if (isAdmin.value) {
     items.push({ path: '/admin/users', label: '用户管理', icon: 'User' })

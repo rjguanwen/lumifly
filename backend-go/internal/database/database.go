@@ -120,6 +120,7 @@ func EnsureSchema(db *gorm.DB, cfg *config.Config) error {
 		{"password_hint", "TEXT"},
 		{"security_question", "TEXT"},
 		{"security_answer", "TEXT"},
+		{"signature", "TEXT"},
 	} {
 		if err := db.Exec(fmt.Sprintf("ALTER TABLE users ADD COLUMN %s %s", col.name, col.typ)).Error; err != nil {
 			if !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
@@ -130,6 +131,22 @@ func EnsureSchema(db *gorm.DB, cfg *config.Config) error {
 	// 3) system_settings 表（全新表，用 AutoMigrate 是安全的）
 	if err := db.AutoMigrate(&model.SystemSetting{}); err != nil {
 		return fmt.Errorf("create settings table: %w", err)
+	}
+	// 3.1) 读书记录 books / book_tags 表（全新表，只迁移这两个模型，不影响旧表）
+	if err := db.AutoMigrate(&model.Book{}, &model.BookTag{}); err != nil {
+		return fmt.Errorf("create books table: %w", err)
+	}
+	// 3.2) 书籍领域库 book_domains 表
+	if err := db.AutoMigrate(&model.BookDomain{}); err != nil {
+		return fmt.Errorf("create book_domains table: %w", err)
+	}
+	// 3.3) 广场 publications / likes / comments 表
+	if err := db.AutoMigrate(&model.Publication{}, &model.PublicationLike{}, &model.PublicationComment{}); err != nil {
+		return fmt.Errorf("create publications table: %w", err)
+	}
+	// 3.4) 邀请注册 invitations 表
+	if err := db.AutoMigrate(&model.Invitation{}); err != nil {
+		return fmt.Errorf("create invitations table: %w", err)
 	}
 	// 4) 提升管理员
 	if emails := splitCSV(cfg.AdminEmails); len(emails) > 0 {

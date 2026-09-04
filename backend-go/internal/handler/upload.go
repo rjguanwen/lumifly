@@ -108,6 +108,90 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	})
 }
 
+// avatarImageTypes 头像允许的图片类型。
+var avatarImageTypes = map[string]bool{"image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true}
+
+const maxAvatarSize = 5 * 1024 * 1024 // 5MB
+
+// UploadAvatar 上传当前用户头像（multipart: file）。头像存 uploads/avatars/，替换时删除旧文件。
+func (h *Handler) UploadAvatar(c *gin.Context) {
+	cu := currentUser(c)
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		badRequest(c, "请选择要上传的图片")
+		return
+	}
+	mimeType := fileHeader.Header.Get("Content-Type")
+	if !avatarImageTypes[mimeType] {
+		badRequest(c, "头像仅支持 jpg/png/gif/webp 图片")
+		return
+	}
+	if fileHeader.Size > maxAvatarSize {
+		badRequest(c, "头像图片不能超过 5MB")
+		return
+	}
+
+	dir := filepath.Join(h.uploadDir, "avatars")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		serverError(c, "创建目录失败")
+		return
+	}
+	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+	if ext == "" {
+		ext = extForMime(mimeType)
+	}
+	fileName := uuid.NewString() + ext
+	if err := c.SaveUploadedFile(fileHeader, filepath.Join(dir, fileName)); err != nil {
+		serverError(c, "保存头像失败")
+		return
+	}
+	newURL := "/api/uploads/avatars/" + fileName
+
+	// 删除旧头像（仅当旧头像确实位于本应用的 avatars 目录）
+	var u model.User
+	if err := h.db.First(&u, cu.ID).Error; err != nil {
+		os.Remove(filepath.Join(dir, fileName))
+		notFound(c, "用户不存在")
+		return
+	}
+	if u.AvatarURL != nil && strings.HasPrefix(*u.AvatarURL, "/api/uploads/avatars/") {
+		old := filepath.Join(h.uploadDir, strings.TrimPrefix(*u.AvatarURL, "/api/uploads/"))
+		_ = os.Remove(old)
+	}
+	if err := h.db.Model(&model.User{}).Where("id = ?", cu.ID).
+		Updates(map[string]interface{}{"avatar_url": newURL, "updated_at": model.NowISO()}).Error; err != nil {
+		os.Remove(filepath.Join(dir, fileName))
+		serverError(c, "保存失败")
+		return
+	}
+	h.db.First(&u, cu.ID)
+	c.JSON(200, userJSON(&u))
+}
+
+// DeleteMedia 删除媒体记录及其物理文件（仅本人上传的媒体）。
+func (h *Handler) DeleteMedia(c *gin.Context) {
+	cu := currentUser(c)
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		badRequest(c, "无效的 id")
+		return
+	}
+	var m model.Media
+	if err := h.db.Where("id = ? AND user_id = ?", id, cu.ID).First(&m).Error; err != nil {
+		notFound(c, "附件不存在")
+		return
+	}
+	// 删除物理文件
+	full := filepath.Join(h.uploadDir, filepath.FromSlash(m.FilePath))
+	if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
+		serverError(c, "删除文件失败")
+		return
+	}
+	h.db.Delete(&m)
+	c.JSON(200, gin.H{"success": true})
+}
+
 // ServeFile 提供上传文件的静态访问（/api/uploads/images/xxx.png）。
 func (h *Handler) ServeFile(c *gin.Context) {
 	rel := strings.TrimPrefix(c.Param("filepath"), "/")

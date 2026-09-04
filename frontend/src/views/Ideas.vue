@@ -69,7 +69,7 @@
           <RichTextEditor v-model="form.content" placeholder="记录你的想法，可以用 Markdown 书写..." />
         </el-form-item>
         <el-form-item label="附件">
-          <MediaUploader v-model="form.mediaIds" multiple />
+          <MediaUploader v-model="form.mediaIds" :initial-items="form.mediaObjects" multiple />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -154,6 +154,7 @@ function resetForm() {
   form.title = ''
   form.content = ''
   form.mediaIds = []
+  form.mediaObjects = []
   showForm.value = false
   if (route.query.edit) router.replace('/ideas')
 }

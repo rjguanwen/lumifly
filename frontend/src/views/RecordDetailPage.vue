@@ -7,6 +7,7 @@
           <el-icon class="mr-1"><ArrowLeft /></el-icon>返回列表
         </el-button>
         <div class="flex items-center gap-2">
+          <PublishButton source-type="record" :source-id="route.params.id" />
           <el-button size="small" @click="edit"><el-icon class="mr-1"><Edit /></el-icon>编辑</el-button>
           <el-button size="small" type="danger" plain @click="remove"><el-icon class="mr-1"><Delete /></el-icon>删除</el-button>
         </div>
@@ -66,6 +67,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ImageLightbox from '../components/ImageLightbox.vue'
+import PublishButton from '../components/PublishButton.vue'
 import { recordApi } from '../api'
 import { moodEmoji } from '../utils/helpers'
 

@@ -224,3 +224,18 @@ body {
 .life-calendar-grid {
   width: fit-content;
 }
+
+/* 人生日历竖排底部年份刻度 */
+.life-calendar-axis {
+  width: fit-content;
+}
+
+.life-calendar-year {
+  font-size: 10px;
+  color: #9ca3af;
+  line-height: 16px;
+  white-space: nowrap;
+  padding-right: 6px;
+  text-align: left;
+  overflow: hidden;
+}

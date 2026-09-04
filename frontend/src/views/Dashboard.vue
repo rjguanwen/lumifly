@@ -95,6 +95,7 @@
         :lifespan="auth.user.expectedLifespan || 80"
         :summary-data="summaryData"
         compact
+        @changed="load"
       />
     </div>
 

@@ -16,6 +16,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 		DisplayName      *string `json:"displayName"`
 		BirthDate        *string `json:"birthDate"`
 		ExpectedLifespan *int    `json:"expectedLifespan"`
+		Signature        *string `json:"signature"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		badRequest(c, "请求参数有误")
@@ -45,6 +46,14 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 			return
 		}
 		updates["expected_lifespan"] = *req.ExpectedLifespan
+	}
+	if req.Signature != nil {
+		sig := strings.TrimSpace(*req.Signature)
+		if len([]rune(sig)) > 255 {
+			badRequest(c, "个性签名最多 255 字")
+			return
+		}
+		updates["signature"] = sig
 	}
 	if err := h.db.Model(&model.User{}).Where("id = ?", cu.ID).Updates(updates).Error; err != nil {
 		serverError(c, "保存失败")

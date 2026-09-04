@@ -40,13 +40,16 @@ export const useAuthStore = defineStore('auth', {
       this.setAuth(data.token, data.user)
       return data
     },
-    async register(email, password, displayName) {
-      const data = await authApi.register({ email, password, displayName })
+    async register(email, password, displayName, inviteToken) {
+      const data = await authApi.register({ email, password, displayName, inviteToken })
       this.setAuth(data.token, data.user)
       return data
     },
     async updateProfile(payload) {
       const user = await profileApi.update(payload)
+      return this.applyUser(user)
+    },
+    applyUser(user) {
       this.user = user
       localStorage.setItem('lumifly_user', JSON.stringify(user))
       return user

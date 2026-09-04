@@ -46,6 +46,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	api.POST("/auth/forgot/reset", h.ResetPassword)
 	api.POST("/auth/forgot/send", h.SendForgotEmail)
 	api.POST("/auth/reset", h.ResetPasswordByToken)
+	api.GET("/auth/invite/info", h.InviteInfo)
 
 	// 上传文件静态访问（公开，与旧版一致）
 	api.GET("/uploads/*filepath", h.ServeFile)
@@ -58,6 +59,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		user.PUT("/auth/security", h.SetSecurityInfo)
 		user.PUT("/auth/password", h.ChangePassword)
 		user.PUT("/profile", h.UpdateProfile)
+		user.PUT("/profile/avatar", h.UploadAvatar)
 
 		// 记录
 		user.GET("/records", h.ListRecords)
@@ -91,11 +93,36 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		user.GET("/tags", h.ListTags)
 		user.POST("/tags", h.CreateTag)
 
+		// 读书记录
+		user.GET("/books", h.ListBooks)
+		user.POST("/books", h.CreateBook)
+		user.GET("/books/:id", h.GetBook)
+		user.PUT("/books/:id", h.UpdateBook)
+		user.DELETE("/books/:id", h.DeleteBook)
+
+		// 书籍领域库
+		user.GET("/book-domains", h.ListBookDomains)
+		user.POST("/book-domains", h.CreateBookDomain)
+		user.PUT("/book-domains/:id", h.RenameBookDomain)
+		user.DELETE("/book-domains/:id", h.DeleteBookDomain)
+
+		// 广场
+		user.POST("/publications", h.Publish)
+		user.GET("/publications", h.ListSquare)
+		user.GET("/publications/mine", h.Mine)
+		user.GET("/publications/:id", h.GetSquarePost)
+		user.DELETE("/publications/:id", h.Unpublish)
+		user.POST("/publications/:id/like", h.ToggleLike)
+		user.GET("/publications/:id/comments", h.ListComments)
+		user.POST("/publications/:id/comments", h.AddComment)
+		user.DELETE("/publications/comment/:id", h.DeleteComment)
+
 		// 日历汇总
 		user.GET("/calendar/summary", h.CalendarSummary)
 
 		// 上传
 		user.POST("/upload", h.UploadFile)
+		user.DELETE("/media/:id", h.DeleteMedia)
 
 		// 管理员专属
 		admin := user.Group("", h.auth.RequireAdmin())
@@ -104,6 +131,10 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 			admin.PATCH("/admin/users/:id", h.SetUserActive)
 			admin.GET("/admin/settings", h.GetSettings)
 			admin.PUT("/admin/settings/registration", h.SetRegistrationEnabled)
+			// 邀请注册
+			admin.POST("/admin/invites", h.CreateInvites)
+			admin.GET("/admin/invites", h.ListInvites)
+			admin.POST("/admin/invites/:id/revoke", h.RevokeInvite)
 		}
 	}
 }
