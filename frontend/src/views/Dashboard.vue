@@ -19,7 +19,7 @@
           </div>
           <p class="text-white/75 text-sm">{{ greetingText }}，{{ auth.user.displayName }}</p>
           <h1 class="text-2xl sm:text-3xl font-bold mt-1.5 leading-snug">
-            人生就像一场没有归途的旅行，愿你一路有光。
+            人生就像一场旅行，愿你一路有光。
           </h1>
           <div class="flex flex-wrap gap-2 mt-5">
             <span class="text-xs px-3 py-1.5 rounded-full bg-white/15 backdrop-blur">出生于 {{ auth.user.birthDate }}</span>
