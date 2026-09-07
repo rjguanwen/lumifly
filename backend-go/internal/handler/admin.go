@@ -62,6 +62,49 @@ func (h *Handler) SetUserActive(c *gin.Context) {
 	c.JSON(200, userJSON(&target))
 }
 
+// SetUserRole 设置用户角色（普通用户/审核员，仅管理员）。
+// 规则：管理员角色不可被修改；不能修改自己的角色。
+func (h *Handler) SetUserRole(c *gin.Context) {
+	cu := currentUser(c)
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		badRequest(c, "无效的 id")
+		return
+	}
+	if uint(id) == cu.ID {
+		fail(c, 400, "不能修改自己的角色")
+		return
+	}
+	var req struct {
+		Role string `json:"role"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		badRequest(c, "请求参数有误")
+		return
+	}
+	if req.Role != model.RoleUser && req.Role != model.RoleModerator {
+		badRequest(c, "角色只能是 user 或 moderator")
+		return
+	}
+	var target model.User
+	if err := h.db.First(&target, id).Error; err != nil {
+		notFound(c, "用户不存在")
+		return
+	}
+	if target.Role == model.RoleAdmin {
+		fail(c, 400, "管理员账号不能修改角色")
+		return
+	}
+	if err := h.db.Model(&model.User{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"role": req.Role, "updated_at": model.NowISO(),
+	}).Error; err != nil {
+		serverError(c, "操作失败")
+		return
+	}
+	h.db.First(&target, id)
+	c.JSON(200, userJSON(&target))
+}
+
 // GetSettings 读取系统设置（注册开关等，仅管理员）。
 func (h *Handler) GetSettings(c *gin.Context) {
 	enabled := h.getSetting(model.SettingRegistrationEnabled, "true") == "true"

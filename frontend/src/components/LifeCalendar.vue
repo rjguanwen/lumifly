@@ -141,7 +141,7 @@
           </div>
           <div>
             <div class="text-base font-semibold text-gray-800">写一篇新日记</div>
-            <div class="text-xs text-gray-400 font-normal">内容支持富文本与 Markdown 两种编辑方式</div>
+            <div class="text-xs text-gray-400 font-normal">所见即所得编辑，支持标题、加粗、图片与链接</div>
           </div>
         </div>
       </template>
@@ -158,7 +158,7 @@
           <el-input v-model="recordForm.title" placeholder="给这一天起个标题..." />
         </el-form-item>
         <el-form-item label="内容">
-          <RichTextEditor v-model="recordForm.content" placeholder="记录这段时间的所见所闻，可以用 Markdown 书写..." />
+          <RichTextEditor v-model="recordForm.content" placeholder="记录这段时间的所见所闻，支持标题、加粗、列表等格式..." />
         </el-form-item>
         <el-form-item label="标签">
           <TagInput v-model="recordForm.tagIds" />
@@ -182,7 +182,7 @@
           </div>
           <div>
             <div class="text-base font-semibold text-gray-800">记录一件人生大事</div>
-            <div class="text-xs text-gray-400 font-normal">内容支持富文本与 Markdown 两种编辑方式</div>
+            <div class="text-xs text-gray-400 font-normal">所见即所得编辑，支持标题、加粗、图片与链接</div>
           </div>
         </div>
       </template>
@@ -209,7 +209,7 @@
           </div>
         </el-form-item>
         <el-form-item label="描述">
-          <RichTextEditor v-model="milestoneForm.description" placeholder="详细描述这个重要事件，可以用 Markdown 书写..." />
+          <RichTextEditor v-model="milestoneForm.description" placeholder="详细描述这个重要事件，支持标题、加粗、列表等格式..." />
         </el-form-item>
         <el-form-item label="附件">
           <MediaUploader v-model="milestoneForm.mediaIds" :initial-items="milestoneForm.mediaObjects" multiple />

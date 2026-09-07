@@ -96,7 +96,7 @@
           </div>
           <div>
             <div class="text-base font-semibold text-gray-800">{{ editingId ? '编辑书籍' : '添加一本书' }}</div>
-            <div class="text-xs text-gray-400 font-normal">书评支持富文本与 Markdown 书写</div>
+            <div class="text-xs text-gray-400 font-normal">所见即所得编辑，支持标题、加粗、图片与链接</div>
           </div>
         </div>
       </template>
@@ -134,7 +134,7 @@
           <el-input v-model="form.recommend" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="这本书值得推荐吗？一句话说说..." />
         </el-form-item>
         <el-form-item label="书评 / 读后感">
-          <RichTextEditor v-model="form.review" placeholder="写点 Markdown 书评，例如：**喜欢**它的……" />
+          <RichTextEditor v-model="form.review" placeholder="写下你的书评与感悟，支持标题、加粗、列表等格式..." />
         </el-form-item>
         <el-form-item label="标签">
           <TagInput v-model="form.tagIds" />

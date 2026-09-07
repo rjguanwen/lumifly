@@ -43,6 +43,23 @@
         <el-option label="最新发布" value="latest" />
         <el-option label="最热" value="hot" />
       </el-select>
+      <el-select
+        v-model="authorSel"
+        clearable
+        filterable
+        placeholder="只看某位作者"
+        style="width: 150px"
+        @change="onAuthorChange"
+      >
+        <el-option v-for="f in authorOptions" :key="f.id" :label="f.name" :value="f.id" />
+      </el-select>
+    </div>
+
+    <!-- 当前作者筛选提示 -->
+    <div v-if="authorFilter" class="flex items-center gap-2 -mt-2">
+      <el-tag type="primary" effect="plain" closable @close="clearAuthorFilter">
+        正在查看 <b>{{ authorFilter.name }}</b> 发布的内容
+      </el-tag>
     </div>
 
     <!-- 空态 -->
@@ -61,7 +78,12 @@
           <UserAvatar :src="p.authorAvatar" :name="p.authorName" :size="32" />
           <div class="min-w-0">
             <div class="flex items-center gap-1.5">
-              <span class="text-sm font-medium text-gray-800 truncate">{{ p.authorName }}</span>
+              <span
+                class="text-sm font-medium text-gray-800 truncate cursor-pointer hover:text-indigo-600"
+                :class="{ 'text-indigo-600': authorFilter?.id === p.userId }"
+                :title="authorFilter?.id === p.userId ? '正在筛选该作者' : '只看 TA 发布的内容'"
+                @click.stop="filterByAuthor(p)"
+              >{{ p.authorName }}</span>
               <span v-if="p.userId === myId" class="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-500">我的</span>
             </div>
             <div class="text-xs text-gray-400">{{ fmtTime(p.createdAt) }}</div>
@@ -118,9 +140,9 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { squareApi } from '../api'
+import { friendApi, squareApi } from '../api'
 import { useAuthStore } from '../stores/auth'
 import UserAvatar from '../components/UserAvatar.vue'
 import { squareTypes, squareTypeOf } from '../utils/squareMeta'
@@ -139,7 +161,61 @@ const typeFilter = ref('')
 const keyword = ref('')
 const sortBy = ref('latest')
 
+// 作者筛选
+const friends = ref([])
+const authorSel = ref(null)
+const authorFilter = ref(null) // { id, name }
+const authorOptions = computed(() => {
+  const opts = []
+  if (auth.user) opts.push({ id: auth.user.id, name: '我（自己）' })
+  for (const f of friends.value) {
+    if (f.id !== auth.user?.id) opts.push({ id: f.id, name: f.displayName })
+  }
+  if (authorFilter.value && !opts.some((o) => o.id === authorFilter.value.id)) {
+    opts.push({ id: authorFilter.value.id, name: authorFilter.value.name })
+  }
+  return opts
+})
+
 const tMeta = (p) => squareTypeOf(p.sourceType)
+
+async function loadFriends() {
+  try {
+    const data = await friendApi.list()
+    friends.value = data.items || []
+  } catch { /* 忽略 */ }
+}
+
+function applyAuthorFilter(user) {
+  if (!user) {
+    authorFilter.value = null
+    authorSel.value = null
+  } else {
+    authorFilter.value = { id: user.id, name: user.name }
+    authorSel.value = user.id
+  }
+  load()
+}
+
+function filterByAuthor(p) {
+  applyAuthorFilter({ id: p.userId, name: p.authorName })
+}
+
+function onAuthorChange(v) {
+  if (!v) {
+    authorFilter.value = null
+    load()
+    return
+  }
+  const o = authorOptions.value.find((x) => x.id === v)
+  if (o) applyAuthorFilter(o)
+}
+
+function clearAuthorFilter() {
+  authorFilter.value = null
+  authorSel.value = null
+  load()
+}
 
 function fmtTime(s) {
   if (!s) return ''
@@ -159,6 +235,7 @@ async function load(reset = true) {
     const params = { sort: sortBy.value, page: reset ? 1 : page.value + 1, limit: 24 }
     if (typeFilter.value) params.type = typeFilter.value
     if (keyword.value.trim()) params.keyword = keyword.value.trim()
+    if (authorFilter.value?.id) params.userId = authorFilter.value.id
     const data = await squareApi.list(params)
     items.value = reset ? data.items || [] : [...items.value, ...(data.items || [])]
     total.value = data.total || items.value.length
@@ -192,7 +269,10 @@ function openDetail(p) {
   router.push(`/square/${p.id}`)
 }
 
-onMounted(() => load())
+onMounted(() => {
+  load()
+  loadFriends()
+})
 </script>
 
 <style scoped>

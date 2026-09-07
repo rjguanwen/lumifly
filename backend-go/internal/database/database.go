@@ -148,6 +148,14 @@ func EnsureSchema(db *gorm.DB, cfg *config.Config) error {
 	if err := db.AutoMigrate(&model.Invitation{}); err != nil {
 		return fmt.Errorf("create invitations table: %w", err)
 	}
+	// 3.5) 速记语录 quick_notes / quick_note_tags 表
+	if err := db.AutoMigrate(&model.QuickNote{}, &model.QuickNoteTag{}); err != nil {
+		return fmt.Errorf("create quick notes table: %w", err)
+	}
+	// 3.6) 好友 friendships 表
+	if err := db.AutoMigrate(&model.Friendship{}); err != nil {
+		return fmt.Errorf("create friendships table: %w", err)
+	}
 	// 4) 提升管理员
 	if emails := splitCSV(cfg.AdminEmails); len(emails) > 0 {
 		res := db.Model(&model.User{}).Where("email IN ?", emails).Update("role", model.RoleAdmin)

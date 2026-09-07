@@ -55,8 +55,10 @@ export const authApi = {
 export const adminApi = {
   users: () => api.get('/admin/users'),
   setUserActive: (id, isActive) => api.patch(`/admin/users/${id}`, { isActive }),
+  setRole: (id, role) => api.patch(`/admin/users/${id}/role`, { role }),
   settings: () => api.get('/admin/settings'),
   setRegistration: (enabled) => api.put('/admin/settings/registration', { enabled }),
+  saveModerationTerms: (custom) => api.put('/admin/moderation/terms', { custom }),
   invites: () => api.get('/admin/invites'),
   createInvites: (emails) => api.post('/admin/invites', { emails }),
   revokeInvite: (id) => api.post(`/admin/invites/${id}/revoke`),
@@ -111,6 +113,25 @@ export const ideaApi = {
   remove: (id) => api.delete(`/ideas/${id}`),
 }
 
+// ===== 速记语录 =====
+export const quickNoteApi = {
+  list: () => api.get('/quick-notes'),
+  create: (data) => api.post('/quick-notes', data),
+  update: (id, data) => api.put(`/quick-notes/${id}`, data),
+  remove: (id) => api.delete(`/quick-notes/${id}`),
+}
+
+// ===== 好友 =====
+export const friendApi = {
+  searchUsers: (keyword) => api.get('/users/search', { params: { keyword } }),
+  list: () => api.get('/friends'),
+  requests: () => api.get('/friends/requests'),
+  sendRequest: (friendId) => api.post('/friends/requests', { friendId }),
+  acceptRequest: (id) => api.post(`/friends/requests/${id}/accept`),
+  cancelOrReject: (id) => api.delete(`/friends/requests/${id}`),
+  remove: (friendId) => api.delete(`/friends/${friendId}`),
+}
+
 // ===== 标签 =====
 export const tagApi = {
   list: () => api.get('/tags'),
@@ -137,6 +158,14 @@ export const squareApi = {
   comments: (id) => api.get(`/publications/${id}/comments`),
   addComment: (id, content) => api.post(`/publications/${id}/comments`, { content }),
   deleteComment: (id) => api.delete(`/publications/comment/${id}`),
+}
+
+// ===== 内容审核（审核员/管理员） =====
+export const moderateApi = {
+  queue: () => api.get('/moderation/queue'),
+  approve: (id) => api.post(`/moderation/queue/${id}/approve`),
+  reject: (id) => api.post(`/moderation/queue/${id}/reject`),
+  terms: () => api.get('/moderation/terms'),
 }
 
 // ===== 书籍领域库 =====

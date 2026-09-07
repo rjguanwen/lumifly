@@ -111,6 +111,23 @@ func (a *Auth) RequireAdmin() gin.HandlerFunc {
 	}
 }
 
+// RequireModerator 需要审核员（含管理员）权限，须置于 RequireUser 之后。
+func (a *Auth) RequireModerator() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		v, ok := c.Get("user")
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "请先登录"})
+			return
+		}
+		cu := v.(*UserContext)
+		if cu.Role != model.RoleAdmin && cu.Role != model.RoleModerator {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"detail": "需要审核员权限"})
+			return
+		}
+		c.Next()
+	}
+}
+
 // SignResetToken 生成一次性密码重置令牌（有效期 30 分钟）。
 func (a *Auth) SignResetToken(email string) (string, error) {
 	now := time.Now()

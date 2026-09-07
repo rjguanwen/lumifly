@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"lumiflybackend/internal/middleware"
 	"lumiflybackend/internal/model"
 )
 
@@ -29,6 +30,19 @@ func clip(s string, n int) string {
 		return string(rs[:n]) + "…"
 	}
 	return s
+}
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+// textToHTML 将纯文本转义为 HTML（保留换行），用于广场快照。
+func textToHTML(s string) string {
+	s = escapeHTML(s)
+	return strings.ReplaceAll(s, "\n", "<br>")
 }
 
 // ---------- 发布快照 ----------
@@ -85,6 +99,14 @@ func (h *Handler) snapshot(userID uint, sourceType string, sourceID uint) (*mode
 			"domain": b.Domain, "readYear": b.ReadYear, "recommend": b.Recommend, "status": b.Status,
 		})
 		p.Meta = string(meta)
+	case model.PubQuick:
+		var q model.QuickNote
+		if err := h.db.Where("id = ? AND user_id = ?", sourceID, userID).First(&q).Error; err != nil {
+			return nil, "速记语录不存在"
+		}
+		// 语录正文已作为预览全文展示，标题改用日期避免内容重复
+		p.Title = "语录 · " + now[:10]
+		p.Content = textToHTML(q.Content)
 	default:
 		return nil, "不支持的内容类型"
 	}
@@ -127,6 +149,7 @@ func (h *Handler) pubItemJSON(p *model.Publication, cuID uint) gin.H {
 		"sourceType": p.SourceType, "sourceId": p.SourceID,
 		"title": p.Title, "preview": p.Preview, "content": p.Content,
 		"author": p.Author, "rating": p.Rating, "meta": meta,
+		"status": p.Status, "reviewCategories": p.ReviewCategories,
 		"createdAt": p.CreatedAt, "updatedAt": p.UpdatedAt,
 		"likeCount": likeCount, "commentCount": commentCount, "liked": liked,
 	}
@@ -134,7 +157,8 @@ func (h *Handler) pubItemJSON(p *model.Publication, cuID uint) gin.H {
 
 // ---------- 接口 ----------
 
-// Publish 将个人内容发布到广场。
+// Publish 将个人内容发布到广场（自动审查，命中敏感内容进入待审）。
+// 若该内容已存在且为 published 则直接返回；pending/rejected 状态会按最新源内容重建快照并重新审查。
 func (h *Handler) Publish(c *gin.Context) {
 	cu := currentUser(c)
 	var req struct {
@@ -146,16 +170,43 @@ func (h *Handler) Publish(c *gin.Context) {
 		return
 	}
 	var existed model.Publication
-	if err := h.db.Where("user_id = ? AND source_type = ? AND source_id = ?", cu.ID, req.SourceType, req.SourceID).
-		First(&existed).Error; err == nil {
+	had := h.db.Where("user_id = ? AND source_type = ? AND source_id = ?", cu.ID, req.SourceType, req.SourceID).
+		First(&existed).Error == nil
+	if had && existed.Status == model.PubStatusPublished {
 		c.JSON(200, h.pubItemJSON(&existed, cu.ID))
 		return
 	}
+
 	pub, errMsg := h.snapshot(cu.ID, req.SourceType, req.SourceID)
 	if errMsg != "" {
 		badRequest(c, errMsg)
 		return
 	}
+	// 自动审查：标题 + 纯文本正文
+	blocked, cats := h.moderateText(pub.Title + "\n" + stripHTML(pub.Content))
+	status := model.PubStatusPublished
+	if blocked {
+		status = model.PubStatusPending
+	}
+	pub.Status = status
+	pub.ReviewCategories = strings.Join(cats, ",")
+
+	if had {
+		// 撤回/驳回后修改源内容重新提交：重建快照并重新审查
+		if err := h.db.Model(&model.Publication{}).Where("id = ?", existed.ID).Updates(map[string]interface{}{
+			"title": pub.Title, "preview": pub.Preview, "content": pub.Content,
+			"author": pub.Author, "rating": pub.Rating, "meta": pub.Meta,
+			"status": status, "review_categories": pub.ReviewCategories, "updated_at": model.NowISO(),
+		}).Error; err != nil {
+			serverError(c, "发布失败")
+			return
+		}
+		var after model.Publication
+		h.db.First(&after, existed.ID)
+		c.JSON(200, h.pubItemJSON(&after, cu.ID))
+		return
+	}
+
 	if err := h.db.Create(pub).Error; err != nil {
 		serverError(c, "发布失败")
 		return
@@ -213,13 +264,18 @@ func (h *Handler) ListSquare(c *gin.Context) {
 	}
 
 	var pubs []model.Publication
-	q := h.db.Model(&model.Publication{})
+	q := h.db.Model(&model.Publication{}).Where("status = ?", model.PubStatusPublished)
 	if typ != "" {
 		q = q.Where("source_type = ?", typ)
 	}
 	if keyword != "" {
 		like := "%" + keyword + "%"
 		q = q.Where("title LIKE ? OR preview LIKE ?", like, like)
+	}
+	if s := c.Query("userId"); s != "" {
+		if uid, err := strconv.ParseUint(s, 10, 64); err == nil && uid > 0 {
+			q = q.Where("user_id = ?", uid)
+		}
 	}
 	if err := q.Find(&pubs).Error; err != nil {
 		serverError(c, "查询失败")
@@ -253,6 +309,17 @@ func (h *Handler) ListSquare(c *gin.Context) {
 	c.JSON(200, gin.H{"items": items[start:end], "total": len(items), "page": page, "limit": limit})
 }
 
+// canAccessPub 判断某用户能否查看帖子（公开帖所有人可见；待审/驳回帖仅作者与审核员可见）。
+func canAccessPub(p *model.Publication, cu *middleware.UserContext) bool {
+	if p.Status == model.PubStatusPublished {
+		return true
+	}
+	if cu.ID == p.UserID {
+		return true
+	}
+	return cu.Role == model.RoleAdmin || cu.Role == model.RoleModerator
+}
+
 // GetSquarePost 帖子详情。
 func (h *Handler) GetSquarePost(c *gin.Context) {
 	cu := currentUser(c)
@@ -264,6 +331,10 @@ func (h *Handler) GetSquarePost(c *gin.Context) {
 	var pub model.Publication
 	if err := h.db.First(&pub, id).Error; err != nil {
 		notFound(c, "帖子不存在")
+		return
+	}
+	if !canAccessPub(&pub, cu) {
+		notFound(c, "帖子不存在或未通过审核")
 		return
 	}
 	c.JSON(200, h.pubItemJSON(&pub, cu.ID))
@@ -280,6 +351,10 @@ func (h *Handler) ToggleLike(c *gin.Context) {
 	var pub model.Publication
 	if err := h.db.First(&pub, id).Error; err != nil {
 		notFound(c, "帖子不存在")
+		return
+	}
+	if !canAccessPub(&pub, cu) {
+		notFound(c, "帖子不存在或未通过审核")
 		return
 	}
 	var cnt int64
@@ -307,6 +382,10 @@ func (h *Handler) AddComment(c *gin.Context) {
 	var pub model.Publication
 	if err := h.db.First(&pub, id).Error; err != nil {
 		notFound(c, "帖子不存在")
+		return
+	}
+	if !canAccessPub(&pub, cu) {
+		notFound(c, "帖子不存在或未通过审核")
 		return
 	}
 	var req struct {
@@ -364,6 +443,10 @@ func (h *Handler) ListComments(c *gin.Context) {
 	var pub model.Publication
 	if err := h.db.First(&pub, id).Error; err != nil {
 		notFound(c, "帖子不存在")
+		return
+	}
+	if !canAccessPub(&pub, cu) {
+		notFound(c, "帖子不存在或未通过审核")
 		return
 	}
 	var cms []model.PublicationComment

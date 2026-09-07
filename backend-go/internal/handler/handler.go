@@ -89,6 +89,21 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		user.PUT("/ideas/:id", h.UpdateIdea)
 		user.DELETE("/ideas/:id", h.DeleteIdea)
 
+		// 速记语录
+		user.GET("/quick-notes", h.ListQuickNotes)
+		user.POST("/quick-notes", h.CreateQuickNote)
+		user.PUT("/quick-notes/:id", h.UpdateQuickNote)
+		user.DELETE("/quick-notes/:id", h.DeleteQuickNote)
+
+		// 好友
+		user.GET("/users/search", h.SearchUsers)
+		user.GET("/friends", h.ListFriends)
+		user.GET("/friends/requests", h.ListFriendRequests)
+		user.POST("/friends/requests", h.SendFriendRequest)
+		user.DELETE("/friends/requests/:id", h.CancelOrRejectFriendRequest)
+		user.POST("/friends/requests/:id/accept", h.AcceptFriendRequest)
+		user.DELETE("/friends/:friendId", h.RemoveFriend)
+
 		// 标签
 		user.GET("/tags", h.ListTags)
 		user.POST("/tags", h.CreateTag)
@@ -124,13 +139,24 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		user.POST("/upload", h.UploadFile)
 		user.DELETE("/media/:id", h.DeleteMedia)
 
+		// 内容审核（审核员/管理员）
+		mod := user.Group("/moderation", h.auth.RequireModerator())
+		{
+			mod.GET("/queue", h.GetModerationQueue)
+			mod.POST("/queue/:id/approve", h.ApprovePublication)
+			mod.POST("/queue/:id/reject", h.RejectPublication)
+			mod.GET("/terms", h.GetModerationTerms)
+		}
+
 		// 管理员专属
 		admin := user.Group("", h.auth.RequireAdmin())
 		{
 			admin.GET("/admin/users", h.ListUsers)
 			admin.PATCH("/admin/users/:id", h.SetUserActive)
+			admin.PATCH("/admin/users/:id/role", h.SetUserRole)
 			admin.GET("/admin/settings", h.GetSettings)
 			admin.PUT("/admin/settings/registration", h.SetRegistrationEnabled)
+			admin.PUT("/admin/moderation/terms", h.SaveModerationTerms)
 			// 邀请注册
 			admin.POST("/admin/invites", h.CreateInvites)
 			admin.GET("/admin/invites", h.ListInvites)

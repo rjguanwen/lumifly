@@ -45,10 +45,13 @@ const routes = [
       { path: 'records/:id', name: 'record-detail', component: () => import('../views/RecordDetailPage.vue'), meta: { title: '日记详情' } },
       { path: 'ideas', name: 'ideas', component: () => import('../views/Ideas.vue'), meta: { title: '想法灵感' } },
       { path: 'ideas/:id', name: 'idea-detail', component: () => import('../views/IdeaDetailPage.vue'), meta: { title: '灵感详情' } },
+      { path: 'quick-notes', name: 'quick-notes', component: () => import('../views/QuickNotes.vue'), meta: { title: '速记语录' } },
+      { path: 'friends', name: 'friends', component: () => import('../views/Friends.vue'), meta: { title: '好友' } },
       { path: 'books', name: 'books', component: () => import('../views/Books.vue'), meta: { title: '读书记录' } },
       { path: 'books/:id', name: 'book-detail', component: () => import('../views/BookDetailPage.vue'), meta: { title: '书籍详情' } },
       { path: 'square', name: 'square', component: () => import('../views/Square.vue'), meta: { title: '广场' } },
       { path: 'square/:id', name: 'square-detail', component: () => import('../views/SquareDetailPage.vue'), meta: { title: '广场内容' } },
+      { path: 'review', name: 'review', component: () => import('../views/Review.vue'), meta: { title: '内容审核', requiresModerator: true } },
       { path: 'settings', name: 'settings', component: () => import('../views/Settings.vue'), meta: { title: '设置' } },
       { path: 'admin/users', name: 'admin-users', component: () => import('../views/AdminUsers.vue'), meta: { title: '用户管理', requiresAdmin: true } },
     ],
@@ -72,6 +75,10 @@ router.beforeEach(async (to) => {
     }
     // 管理员专属页面
     if (to.meta.requiresAdmin && auth.user?.role !== 'admin') {
+      return { name: 'dashboard' }
+    }
+    // 审核员专属页面（管理员或审核员）
+    if (to.meta.requiresModerator && !['admin', 'moderator'].includes(auth.user?.role)) {
       return { name: 'dashboard' }
     }
     // 未完成初始设置则强制进入设置页

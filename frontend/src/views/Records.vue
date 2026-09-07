@@ -52,7 +52,7 @@
           </div>
           <div>
             <div class="text-base font-semibold text-gray-800">{{ editingId ? '编辑日记' : '写一篇新日记' }}</div>
-            <div class="text-xs text-gray-400 font-normal">内容支持富文本与 Markdown 两种编辑方式</div>
+            <div class="text-xs text-gray-400 font-normal">所见即所得编辑，支持标题、加粗、图片与链接</div>
           </div>
         </div>
       </template>
@@ -69,7 +69,7 @@
           <el-input v-model="form.title" placeholder="给今天起个标题..." />
         </el-form-item>
         <el-form-item label="内容">
-          <RichTextEditor v-model="form.content" placeholder="记录今天的所见所闻，可以用 Markdown 书写..." />
+          <RichTextEditor v-model="form.content" placeholder="记录今天的所见所闻，支持标题、加粗、列表等格式..." />
         </el-form-item>
         <el-form-item label="标签">
           <TagInput v-model="form.tagIds" />

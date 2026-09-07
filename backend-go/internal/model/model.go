@@ -26,8 +26,9 @@ func CheckPassword(hash, password string) bool {
 
 // 用户角色
 const (
-	RoleAdmin = "admin"
-	RoleUser  = "user"
+	RoleAdmin     = "admin"     // 管理员
+	RoleModerator = "moderator" // 内容审核员（可审核广场内容）
+	RoleUser      = "user"      // 普通用户
 )
 
 // User 用户。
@@ -98,22 +99,32 @@ const (
 	PubMilestone = "milestone" // 大事记
 	PubIdea      = "idea"      // 想法灵感
 	PubBook      = "book"      // 读书记录（书评）
+	PubQuick     = "quick"     // 速记语录
+)
+
+// 广场帖发布状态
+const (
+	PubStatusPublished = "published" // 已通过（公开可见）
+	PubStatusPending   = "pending"   // 待人工审核
+	PubStatusRejected  = "rejected"  // 未通过审核
 )
 
 // Publication 广场发布帖（内容为发布时刻的快照）。
 type Publication struct {
-	ID         uint   `gorm:"primaryKey" json:"id"`
-	UserID     uint   `gorm:"index;not null" json:"userId"`
-	SourceType string `gorm:"size:16;index;not null" json:"sourceType"` // record/milestone/idea/book
-	SourceID   uint   `gorm:"not null" json:"sourceId"`
-	Title      string `gorm:"size:255" json:"title"`
-	Preview    string `gorm:"type:text" json:"preview"` // 纯文本预览（搜索/摘要）
-	Content    string `gorm:"type:text" json:"content"` // HTML 正文快照
-	Author     string `gorm:"size:128" json:"author"`   // 书籍作者等
-	Rating     int    `gorm:"default:0" json:"rating"`  // 书籍星级（其他为 0）
-	Meta       string `gorm:"type:text" json:"meta"`    // 附加 JSON（领域/年份/进度/推荐语等）
-	CreatedAt  string `gorm:"size:40" json:"createdAt"`
-	UpdatedAt  string `gorm:"size:40" json:"updatedAt"`
+	ID               uint   `gorm:"primaryKey" json:"id"`
+	UserID           uint   `gorm:"index;not null" json:"userId"`
+	SourceType       string `gorm:"size:16;index;not null" json:"sourceType"` // record/milestone/idea/book/quick
+	SourceID         uint   `gorm:"not null" json:"sourceId"`
+	Title            string `gorm:"size:255" json:"title"`
+	Preview          string `gorm:"type:text" json:"preview"` // 纯文本预览（搜索/摘要）
+	Content          string `gorm:"type:text" json:"content"` // HTML 正文快照
+	Author           string `gorm:"size:128" json:"author"`   // 书籍作者等
+	Rating           int    `gorm:"default:0" json:"rating"`  // 书籍星级（其他为 0）
+	Meta             string `gorm:"type:text" json:"meta"`    // 附加 JSON（领域/年份/进度/推荐语等）
+	Status           string `gorm:"size:16;default:published" json:"status"` // published / pending / rejected
+	ReviewCategories string `gorm:"size:128" json:"reviewCategories"`        // 命中类别（terror/violence/porn/politics，逗号分隔）
+	CreatedAt        string `gorm:"size:40" json:"createdAt"`
+	UpdatedAt        string `gorm:"size:40" json:"updatedAt"`
 }
 
 // PublicationLike 广场点赞（一人一帖一次）。
@@ -142,6 +153,7 @@ type SystemSetting struct {
 // 系统设置键
 const (
 	SettingRegistrationEnabled = "registration_enabled" // "true"/"false"
+	SettingModerationTerms     = "moderation_terms"     // 自定义敏感词库 JSON map[category][]term
 )
 
 // ==================== 邀请注册 ====================
@@ -227,6 +239,34 @@ type Idea struct {
 	UpdatedAt        string  `gorm:"size:40" json:"updatedAt"`
 }
 
+// ==================== 好友 ====================
+
+const (
+	FriendPending  = "pending"  // 待对方处理
+	FriendAccepted = "accepted" // 已是好友
+)
+
+// Friendship 好友关系（user_id 为申请发起方；双向 pending 时接受即成为好友）。
+type Friendship struct {
+	ID        uint   `gorm:"primaryKey" json:"id"`
+	UserID    uint   `gorm:"uniqueIndex:uk_user_friend;not null" json:"userId"` // 申请发起方
+	FriendID  uint   `gorm:"uniqueIndex:uk_user_friend;not null" json:"friendId"`
+	Status    string `gorm:"size:16;default:pending" json:"status"`
+	CreatedAt string `gorm:"size:40" json:"createdAt"`
+	UpdatedAt string `gorm:"size:40" json:"updatedAt"`
+}
+
+// ==================== QuickNotes ====================
+
+// QuickNote 速记语录（≤360 字纯文本）。
+type QuickNote struct {
+	ID        uint   `gorm:"primaryKey" json:"id"`
+	UserID    uint   `gorm:"index;not null" json:"userId"`
+	Content   string `gorm:"type:text;not null" json:"content"`
+	CreatedAt string `gorm:"size:40" json:"createdAt"`
+	UpdatedAt string `gorm:"size:40" json:"updatedAt"`
+}
+
 // ==================== Media ====================
 
 // Media 上传的文件（图片/视频）。
@@ -271,6 +311,12 @@ type MilestoneTag struct {
 type IdeaTag struct {
 	IdeaID uint `gorm:"primaryKey" json:"ideaId"`
 	TagID  uint `gorm:"primaryKey" json:"tagId"`
+}
+
+// QuickNoteTag 速记语录-标签关联。
+type QuickNoteTag struct {
+	QuickNoteID uint `gorm:"primaryKey" json:"quickNoteId"`
+	TagID       uint `gorm:"primaryKey" json:"tagId"`
 }
 
 // PlanTag 规划-标签关联。

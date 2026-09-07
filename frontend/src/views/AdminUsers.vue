@@ -132,6 +132,7 @@
         <el-table-column label="角色" width="100">
           <template #default="{ row }">
             <el-tag v-if="row.role === 'admin'" size="small" type="danger" effect="dark">管理员</el-tag>
+            <el-tag v-else-if="row.role === 'moderator'" size="small" type="warning" effect="plain">审核员</el-tag>
             <el-tag v-else size="small" type="info" effect="plain">普通用户</el-tag>
           </template>
         </el-table-column>
@@ -144,7 +145,7 @@
         <el-table-column label="注册时间" width="120">
           <template #default="{ row }">{{ (row.createdAt || '').slice(0, 10) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="130">
+        <el-table-column label="操作" width="150">
           <template #default="{ row }">
             <template v-if="row.id === auth.user?.id">
               <span class="text-xs text-gray-300">（本人）</span>
@@ -152,9 +153,14 @@
             <template v-else-if="row.role === 'admin'">
               <span class="text-xs text-gray-300">管理员</span>
             </template>
-            <el-button v-else size="small" :type="row.isActive ? 'danger' : 'success'" plain @click="toggleActive(row)">
-              {{ row.isActive ? '停用' : '启用' }}
-            </el-button>
+            <div v-else class="flex flex-col items-start gap-1">
+              <el-button size="small" :type="row.isActive ? 'danger' : 'success'" plain @click="toggleActive(row)">
+                {{ row.isActive ? '停用' : '启用' }}
+              </el-button>
+              <el-button size="small" text type="primary" @click="toggleRole(row)">
+                {{ row.role === 'moderator' ? '设为普通用户' : '设为审核员' }}
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -284,6 +290,24 @@ async function toggleActive(row) {
   try {
     await adminApi.setUserActive(row.id, !row.isActive)
     ElMessage.success(`已${action}用户 ${row.displayName}`)
+    loadUsers()
+  } catch { /* 拦截器已提示 */ }
+}
+
+async function toggleRole(row) {
+  const target = row.role === 'moderator' ? 'user' : 'moderator'
+  const label = target === 'moderator' ? '设为内容审核员' : '设为普通用户'
+  const roleName = target === 'moderator' ? '审核员（可审核广场内容）' : '普通用户'
+  try {
+    await ElMessageBox.confirm(`将「${row.displayName}」${label}？${target === 'moderator' ? '该用户可在「内容审核」中处理待审内容。' : '该用户将失去审核权限。'}`, '提示', {
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  try {
+    await adminApi.setRole(row.id, target)
+    ElMessage.success(`已将 ${row.displayName} 设为${roleName}`)
     loadUsers()
   } catch { /* 拦截器已提示 */ }
 }

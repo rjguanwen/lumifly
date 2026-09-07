@@ -4,6 +4,7 @@ export const squareTypes = [
   { value: 'milestone', label: '大事记', color: '#d97706', bg: '#fef3c7', icon: 'Trophy' },
   { value: 'idea', label: '灵感', color: '#9333ea', bg: '#f3e8ff', icon: 'Lightning' },
   { value: 'book', label: '读书', color: '#0e9f6e', bg: '#e7f7f0', icon: 'Collection' },
+  { value: 'quick', label: '语录', color: '#0891b2', bg: '#e0f7fe', icon: 'ChatDotSquare' },
 ]
 
 export function squareTypeOf(v) {

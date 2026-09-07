@@ -60,6 +60,7 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const isAdmin = computed(() => auth.user?.role === 'admin')
+const isModerator = computed(() => auth.user?.role === 'admin' || auth.user?.role === 'moderator')
 
 // 详情子路由（/records/:id 等）时高亮对应菜单
 const activeMenu = computed(() => {
@@ -76,9 +77,14 @@ const navItems = computed(() => {
     { path: '/milestones', label: '大事记', icon: 'Trophy' },
     { path: '/records', label: '日常记录', icon: 'EditPen' },
     { path: '/ideas', label: '想法灵感', icon: 'Lightning' },
+    { path: '/quick-notes', label: '速记语录', icon: 'ChatDotSquare' },
     { path: '/books', label: '读书记录', icon: 'Collection' },
+    { path: '/friends', label: '好友', icon: 'UserFilled' },
     { path: '/square', label: '广场', icon: 'Compass' },
   ]
+  if (isModerator.value) {
+    items.push({ path: '/review', label: '内容审核', icon: 'Checked' })
+  }
   if (isAdmin.value) {
     items.push({ path: '/admin/users', label: '用户管理', icon: 'User' })
   }

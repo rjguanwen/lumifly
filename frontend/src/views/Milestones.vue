@@ -65,7 +65,7 @@
           </div>
           <div>
             <div class="text-base font-semibold text-gray-800">{{ editingId ? '编辑大事记' : '记录一件人生大事' }}</div>
-            <div class="text-xs text-gray-400 font-normal">内容支持富文本与 Markdown 两种编辑方式</div>
+            <div class="text-xs text-gray-400 font-normal">所见即所得编辑，支持标题、加粗、图片与链接</div>
           </div>
         </div>
       </template>
@@ -92,7 +92,7 @@
           </div>
         </el-form-item>
         <el-form-item label="描述">
-          <RichTextEditor v-model="form.description" placeholder="详细描述这个重要事件，可以用 Markdown 书写..." />
+          <RichTextEditor v-model="form.description" placeholder="详细描述这个重要事件，支持标题、加粗、列表等格式..." />
         </el-form-item>
         <el-form-item label="附件">
           <MediaUploader v-model="form.mediaIds" :initial-items="form.mediaObjects" multiple />
