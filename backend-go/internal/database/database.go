@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"fmt"
 	"io"
 	"log"
@@ -16,6 +17,16 @@ import (
 	"lumiflybackend/internal/config"
 	"lumiflybackend/internal/model"
 )
+
+// execAddColumn 执行幂等 ALTER ADD COLUMN：列已存在（duplicate column）视为成功，避免噪音日志。
+func execAddColumn(sqlDB *sql.DB, query string) error {
+	if _, err := sqlDB.Exec(query); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+			return err
+		}
+	}
+	return nil
+}
 
 // Open 打开 SQLite 数据库。
 // 首次启动时若目标库不存在且配置了旧版 life-recorder 数据库，则自动复制旧库完成数据迁移。
@@ -100,17 +111,19 @@ func Migrate(db *gorm.DB) error {
 //   - 确保 system_settings 表存在。
 //   - 依据配置把指定邮箱提升为管理员。
 func EnsureSchema(db *gorm.DB, cfg *config.Config) error {
+	// 0) 底层连接：用户表列升级用 database/sql 直连，可静默处理“重复列”等已知迁移错误，
+	//    避免 GORM logger 把每次启动的幂等 ALTER 误报为错误日志。
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("get sql db: %w", err)
+	}
 	// 1) users 新增 role
-	if err := db.Exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'").Error; err != nil {
-		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
-			return fmt.Errorf("add role column: %w", err)
-		}
+	if err := execAddColumn(sqlDB, "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'"); err != nil {
+		return fmt.Errorf("add role column: %w", err)
 	}
 	// 2) users 新增 is_active
-	if err := db.Exec("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1").Error; err != nil {
-		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
-			return fmt.Errorf("add is_active column: %w", err)
-		}
+	if err := execAddColumn(sqlDB, "ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1"); err != nil {
+		return fmt.Errorf("add is_active column: %w", err)
 	}
 	// 2.1) users 新增密码找回相关列（均可空，无默认值）
 	for _, col := range []struct {
@@ -123,10 +136,8 @@ func EnsureSchema(db *gorm.DB, cfg *config.Config) error {
 		{"signature", "TEXT"},
 		{"square_read_at", "TEXT"},
 	} {
-		if err := db.Exec(fmt.Sprintf("ALTER TABLE users ADD COLUMN %s %s", col.name, col.typ)).Error; err != nil {
-			if !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
-				return fmt.Errorf("add %s column: %w", col.name, err)
-			}
+		if err := execAddColumn(sqlDB, fmt.Sprintf("ALTER TABLE users ADD COLUMN %s %s", col.name, col.typ)); err != nil {
+			return fmt.Errorf("add %s column: %w", col.name, err)
 		}
 	}
 	// 2.2) 广场已读水位回填（新功能上线前发布的内容不算未读）

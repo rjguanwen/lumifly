@@ -132,8 +132,33 @@ func (h *Handler) snapshot(userID uint, sourceType string, sourceID uint) (*mode
 	default:
 		return nil, "不支持的内容类型"
 	}
+	// 附件媒体（图片/视频）追加进快照正文，使广场上也能看到相关图片
+	if sourceType == model.PubRecord || sourceType == model.PubMilestone || sourceType == model.PubIdea {
+		if media := h.mediaByEntity(sourceType, sourceID); len(media) > 0 {
+			p.Content = contentWithMedia(p.Content, media)
+		}
+	}
 	p.Preview = clip(stripHTML(p.Content), 300)
 	return p, ""
+}
+
+// contentWithMedia 在正文末尾追加附件媒体 HTML（图片/视频）。
+func contentWithMedia(html string, media []gin.H) string {
+	var b strings.Builder
+	b.WriteString(html)
+	for _, m := range media {
+		mt, _ := m["mimeType"].(string)
+		u, _ := m["url"].(string)
+		if u == "" {
+			continue
+		}
+		if strings.HasPrefix(mt, "image/") {
+			b.WriteString(`<p class="pub-media"><img src="` + u + `" alt="" style="max-width:100%;border-radius:12px;margin:8px 0" /></p>`)
+		} else if strings.HasPrefix(mt, "video/") {
+			b.WriteString(`<p class="pub-media"><video controls preload="metadata" src="` + u + `" style="max-width:100%;border-radius:12px;margin:8px 0"></video></p>`)
+		}
+	}
+	return b.String()
 }
 
 // ---------- 序列化 ----------
