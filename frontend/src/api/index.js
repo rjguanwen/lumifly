@@ -196,6 +196,11 @@ export const calendarCenterApi = {
   read: (friendId) => api.post('/calendar/comment-center/read', { friendId }),
 }
 
+// ===== 菜单红点统计 =====
+export const badgeApi = {
+  unread: () => api.get('/badges/unread'),
+}
+
 // ===== 书籍领域库 =====
 export const bookDomainApi = {
   list: () => api.get('/book-domains'),

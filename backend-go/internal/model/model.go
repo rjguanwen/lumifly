@@ -47,6 +47,7 @@ type User struct {
 	SecurityQuestion string  `gorm:"size:128" json:"-"`                     // 找回安全问题
 	SecurityAnswer   string  `gorm:"size:128" json:"-"`                     // 安全答案（存小写，不返回）
 	Signature        string  `gorm:"size:255" json:"signature"`             // 个性签名
+	SquareReadAt     string  `gorm:"size:40" json:"-"`                     // 广场已读水位（ISO，其后公开帖视为未读）
 	CreatedAt        string  `gorm:"size:40" json:"createdAt"`
 	UpdatedAt        string  `gorm:"size:40" json:"updatedAt"`
 }

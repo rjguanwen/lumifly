@@ -110,7 +110,10 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import UserAvatar from '../components/UserAvatar.vue'
+import { useBadgeStore } from '../stores/badges'
 import { friendApi } from '../api'
+
+const badge = useBadgeStore()
 
 const searchKeyword = ref('')
 const searching = ref(false)
@@ -131,6 +134,7 @@ async function loadAll() {
     friends.value = f.items || []
     received.value = r.received || []
     sent.value = r.sent || []
+    badge.refresh()
   } catch { /* 拦截器已提示 */ }
 }
 

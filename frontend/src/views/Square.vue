@@ -90,6 +90,9 @@
             <p v-if="p.authorSignature" class="text-xs text-gray-400 italic truncate mt-0.5">{{ p.authorSignature }}</p>
           </div>
           <div class="flex-1" />
+          <span v-if="p.isNew" class="flex items-center gap-1 text-[11px] text-rose-500 shrink-0">
+            <span class="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_0_3px_rgba(244,63,94,0.15)]" />新
+          </span>
           <span
             class="text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 shrink-0"
             :style="{ background: tMeta(p).bg, color: tMeta(p).color }"

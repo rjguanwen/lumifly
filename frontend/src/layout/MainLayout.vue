@@ -14,7 +14,10 @@
       <el-menu :default-active="activeMenu" router class="app-menu" @select="handleSelect">
         <el-menu-item v-for="item in navItems" :key="item.path" :index="item.path">
           <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
+          <span class="flex-1 flex items-center gap-1.5">
+            <span class="flex-1">{{ item.label }}</span>
+            <i v-if="menuDot(item)" class="menu-dot" />
+          </span>
         </el-menu-item>
       </el-menu>
       <div class="aside-footer">
@@ -48,9 +51,10 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useBadgeStore } from '../stores/badges'
 import { ElMessageBox } from 'element-plus'
 import BrandLogo from '../components/BrandLogo.vue'
 import UserAvatar from '../components/UserAvatar.vue'
@@ -61,6 +65,16 @@ const auth = useAuthStore()
 
 const isAdmin = computed(() => auth.user?.role === 'admin')
 const isModerator = computed(() => auth.user?.role === 'admin' || auth.user?.role === 'moderator')
+
+// 菜单红点：好友=有未处理申请；广场=有新公开内容
+const badge = useBadgeStore()
+function menuDot(item) {
+  if (item.path === '/friends') return badge.friendRequests > 0
+  if (item.path === '/square') return badge.squareUnread > 0
+  return false
+}
+onMounted(() => badge.refresh())
+watch(() => route.path, () => badge.refresh())
 
 // 详情子路由（/records/:id 等）时高亮对应菜单
 const activeMenu = computed(() => {
@@ -175,5 +189,14 @@ async function handleLogout() {
 .app-content {
   padding: 20px;
   overflow-y: auto;
+}
+
+.menu-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f43f5e;
+  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.18);
+  flex-shrink: 0;
 }
 </style>

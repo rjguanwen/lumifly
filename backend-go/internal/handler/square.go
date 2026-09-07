@@ -304,10 +304,14 @@ func (h *Handler) ListSquare(c *gin.Context) {
 		return
 	}
 
-	// 组装（含统计与点赞态）
+	// 组装（含统计与点赞态），并标注相对用户已读水位的“新”内容
+	wm := h.squareReadWatermark(cu.ID)
 	items := make([]gin.H, 0, len(pubs))
 	for i := range pubs {
-		items = append(items, h.pubItemJSON(&pubs[i], cu.ID))
+		item := h.pubItemJSON(&pubs[i], cu.ID)
+		item["isNew"] = pubs[i].Status == model.PubStatusPublished &&
+			pubs[i].UserID != cu.ID && pubs[i].UpdatedAt > wm
+		items = append(items, item)
 	}
 	if sortBy == "hot" {
 		sort.SliceStable(items, func(i, j int) bool {
@@ -358,6 +362,10 @@ func (h *Handler) GetSquarePost(c *gin.Context) {
 	if !canAccessPub(&pub, cu) {
 		notFound(c, "帖子不存在或未通过审核")
 		return
+	}
+	// 打开公开帖即视为已读（推进水位）
+	if pub.Status == model.PubStatusPublished && pub.UserID != cu.ID {
+		h.advanceSquareRead(cu.ID, pub.UpdatedAt)
 	}
 	c.JSON(200, h.pubItemJSON(&pub, cu.ID))
 }

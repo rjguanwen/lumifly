@@ -121,12 +121,17 @@ func EnsureSchema(db *gorm.DB, cfg *config.Config) error {
 		{"security_question", "TEXT"},
 		{"security_answer", "TEXT"},
 		{"signature", "TEXT"},
+		{"square_read_at", "TEXT"},
 	} {
 		if err := db.Exec(fmt.Sprintf("ALTER TABLE users ADD COLUMN %s %s", col.name, col.typ)).Error; err != nil {
 			if !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
 				return fmt.Errorf("add %s column: %w", col.name, err)
 			}
 		}
+	}
+	// 2.2) 广场已读水位回填（新功能上线前发布的内容不算未读）
+	if err := db.Exec("UPDATE users SET square_read_at = ? WHERE square_read_at IS NULL OR square_read_at = ''", model.NowISO()).Error; err != nil {
+		return fmt.Errorf("backfill square_read_at: %w", err)
 	}
 	// 3) system_settings 表（全新表，用 AutoMigrate 是安全的）
 	if err := db.AutoMigrate(&model.SystemSetting{}); err != nil {

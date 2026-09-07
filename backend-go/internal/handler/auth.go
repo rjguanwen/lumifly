@@ -166,6 +166,7 @@ func (h *Handler) Register(c *gin.Context) {
 		ExpectedLifespan: 80,
 		Role:             model.RoleUser,
 		IsActive:         true,
+		SquareReadAt:     now,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}

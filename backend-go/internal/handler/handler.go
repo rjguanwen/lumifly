@@ -153,6 +153,9 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		user.POST("/upload", h.UploadFile)
 		user.DELETE("/media/:id", h.DeleteMedia)
 
+		// 菜单红点未读统计
+		user.GET("/badges/unread", h.UnreadBadges)
+
 		// 内容审核（审核员/管理员）
 		mod := user.Group("/moderation", h.auth.RequireModerator())
 		{
