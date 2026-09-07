@@ -76,6 +76,11 @@
                 <video v-else-if="med.mimeType?.startsWith('video/')" :src="med.url" controls class="w-full rounded-lg max-h-60" />
               </template>
             </div>
+            <div class="flex justify-end mt-2">
+              <el-button size="small" text type="primary" @click="openComments(m.title, 'milestone', m.id)">
+                <el-icon class="mr-0.5"><ChatLineSquare /></el-icon>私密评价
+              </el-button>
+            </div>
           </div>
         </div>
 
@@ -95,6 +100,9 @@
                 <div class="text-sm font-medium text-gray-800 truncate">{{ r.title || '（无标题日记）' }}</div>
                 <div class="text-xs text-gray-400 mt-0.5">{{ r.recordDate }}</div>
               </div>
+              <el-button size="small" text type="primary" @click="openComments(r.title || '日记', 'record', r.id)">
+                <el-icon class="mr-0.5"><ChatLineSquare /></el-icon>评价
+              </el-button>
               <el-button size="small" type="primary" plain @click="viewRecordItem(r)">查看记录</el-button>
             </div>
           </div>
@@ -128,6 +136,11 @@
             />
             <video v-else-if="med.mimeType?.startsWith('video/')" :src="med.url" controls class="w-full rounded-xl max-h-56" />
           </template>
+        </div>
+        <div class="flex justify-end pt-1">
+          <el-button type="primary" plain @click="openComments(detailRecord.title || '日记', 'record', detailRecord.id)">
+            <el-icon class="mr-1"><ChatLineSquare /></el-icon>私密评价
+          </el-button>
         </div>
       </div>
     </el-dialog>
@@ -226,6 +239,15 @@
       :images="lightboxImages"
       v-model:image-index="lightboxIndex"
     />
+
+    <!-- 双方可见的私密评价 -->
+    <CalendarCommentDialog
+      v-model:visible="commentVisible"
+      :owner-id="auth.user?.id"
+      :target-type="commentType"
+      :target-id="commentTarget"
+      :title="commentTitle"
+    />
   </div>
 </template>
 
@@ -238,8 +260,12 @@ import RichTextEditor from './RichTextEditor.vue'
 import MediaUploader from './MediaUploader.vue'
 import TagInput from './TagInput.vue'
 import MoodPicker from './MoodPicker.vue'
+import CalendarCommentDialog from './CalendarCommentDialog.vue'
 import { recordApi, milestoneApi } from '../api'
+import { useAuthStore } from '../stores/auth'
 import { categoryLabel, milestoneCategories, moodEmoji } from '../utils/helpers'
+
+const auth = useAuthStore()
 
 const props = defineProps({
   birthDate: { type: String, required: true },
@@ -528,6 +554,19 @@ async function saveMilestoneFromCalendar() {
   } finally {
     savingMilestone.value = false
   }
+}
+
+// ---------- 私密评价 ----------
+const commentVisible = ref(false)
+const commentType = ref('record')
+const commentTarget = ref(0)
+const commentTitle = ref('')
+
+function openComments(title, type, id) {
+  commentTitle.value = title || ''
+  commentType.value = type
+  commentTarget.value = id
+  commentVisible.value = true
 }
 
 // ---------- 图片灯箱 ----------

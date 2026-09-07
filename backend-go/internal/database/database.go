@@ -156,6 +156,10 @@ func EnsureSchema(db *gorm.DB, cfg *config.Config) error {
 	if err := db.AutoMigrate(&model.Friendship{}); err != nil {
 		return fmt.Errorf("create friendships table: %w", err)
 	}
+	// 3.7) 人生日历分享 calendar_shares / calendar_comments / calendar_comment_reads 表
+	if err := db.AutoMigrate(&model.CalendarShare{}, &model.CalendarComment{}, &model.CalendarCommentRead{}); err != nil {
+		return fmt.Errorf("create calendar share tables: %w", err)
+	}
 	// 4) 提升管理员
 	if emails := splitCSV(cfg.AdminEmails); len(emails) > 0 {
 		res := db.Model(&model.User{}).Where("email IN ?", emails).Update("role", model.RoleAdmin)

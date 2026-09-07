@@ -256,6 +256,36 @@ type Friendship struct {
 	UpdatedAt string `gorm:"size:40" json:"updatedAt"`
 }
 
+// ==================== 人生日历分享与私密评价 ====================
+
+// CalendarShare 人生日历分享授权（user_id 为日历主人，friend_id 为被授权查看的好友）。
+type CalendarShare struct {
+	ID        uint   `gorm:"primaryKey" json:"id"`
+	UserID    uint   `gorm:"uniqueIndex:uk_share;not null" json:"userId"`
+	FriendID  uint   `gorm:"uniqueIndex:uk_share;not null" json:"friendId"`
+	CreatedAt string `gorm:"size:40" json:"createdAt"`
+}
+
+// CalendarComment 日历内容（大事记/日常记录）的私密评价，仅分享双方可见。
+type CalendarComment struct {
+	ID          uint   `gorm:"primaryKey" json:"id"`
+	OwnerUserID uint   `gorm:"index;not null" json:"ownerUserId"` // 内容归属用户
+	AuthorUserID uint  `gorm:"not null" json:"authorUserId"`      // 评论者（主人或好友）
+	TargetType  string `gorm:"size:16;index;not null" json:"targetType"` // record / milestone
+	TargetID    uint   `gorm:"index;not null" json:"targetId"`
+	Content     string `gorm:"type:text;not null" json:"content"`
+	CreatedAt   string `gorm:"size:40" json:"createdAt"`
+}
+
+// CalendarCommentRead 私密评论已读水位（user_id 为读者，other_id 为对方，双方视角各记一条）。
+type CalendarCommentRead struct {
+	ID            uint   `gorm:"primaryKey" json:"id"`
+	UserID        uint   `gorm:"uniqueIndex:uk_read;not null" json:"userId"`
+	OtherID       uint   `gorm:"uniqueIndex:uk_read;not null" json:"otherId"`
+	LastCommentID uint   `gorm:"not null" json:"lastCommentId"`
+	UpdatedAt     string `gorm:"size:40" json:"updatedAt"`
+}
+
 // ==================== QuickNotes ====================
 
 // QuickNote 速记语录（≤360 字纯文本）。

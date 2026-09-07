@@ -80,6 +80,7 @@ const navItems = computed(() => {
     { path: '/quick-notes', label: '速记语录', icon: 'ChatDotSquare' },
     { path: '/books', label: '读书记录', icon: 'Collection' },
     { path: '/friends', label: '好友', icon: 'UserFilled' },
+    { path: '/shared-calendar', label: '好友日历', icon: 'View' },
     { path: '/square', label: '广场', icon: 'Compass' },
   ]
   if (isModerator.value) {

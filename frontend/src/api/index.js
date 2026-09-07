@@ -168,6 +168,34 @@ export const moderateApi = {
   terms: () => api.get('/moderation/terms'),
 }
 
+// ===== 人生日历分享 =====
+export const calendarShareApi = {
+  mine: () => api.get('/calendar/shares'),
+  add: (friendId) => api.post('/calendar/shares', { friendId }),
+  remove: (friendId) => api.delete(`/calendar/shares/${friendId}`),
+  received: () => api.get('/calendar/shares/received'),
+}
+
+export const sharedCalendarApi = {
+  summary: (userId) => api.get(`/calendar/shared/${userId}/summary`),
+  period: (userId, from, to) => api.get(`/calendar/shared/${userId}/period`, { params: { from, to } }),
+}
+
+// ===== 人生日历私密评价 =====
+export const calendarCommentApi = {
+  list: (ownerId, targetType, targetId) =>
+    api.get('/calendar/comments', { params: { ownerId, targetType, targetId } }),
+  post: (data) => api.post('/calendar/comments', data),
+  remove: (id) => api.delete(`/calendar/comments/${id}`),
+}
+
+// ===== 私密评论中心（与某好友的往来） =====
+export const calendarCenterApi = {
+  unread: () => api.get('/calendar/comment-center/unread'),
+  center: (friendId) => api.get('/calendar/comment-center', { params: { friendId } }),
+  read: (friendId) => api.post('/calendar/comment-center/read', { friendId }),
+}
+
 // ===== 书籍领域库 =====
 export const bookDomainApi = {
   list: () => api.get('/book-domains'),

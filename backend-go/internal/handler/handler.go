@@ -104,6 +104,20 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		user.POST("/friends/requests/:id/accept", h.AcceptFriendRequest)
 		user.DELETE("/friends/:friendId", h.RemoveFriend)
 
+		// 人生日历分享与私密评价
+		user.GET("/calendar/shares", h.MyCalendarShares)
+		user.POST("/calendar/shares", h.AddCalendarShare)
+		user.DELETE("/calendar/shares/:friendId", h.RemoveCalendarShare)
+		user.GET("/calendar/shares/received", h.ReceivedCalendarShares)
+		user.GET("/calendar/shared/:userId/summary", h.SharedCalendarSummary)
+		user.GET("/calendar/shared/:userId/period", h.SharedCalendarPeriod)
+		user.GET("/calendar/comments", h.ListCalendarComments)
+		user.POST("/calendar/comments", h.AddCalendarComment)
+		user.DELETE("/calendar/comments/:id", h.DeleteCalendarComment)
+		user.GET("/calendar/comment-center/unread", h.CommentCenterUnread)
+		user.GET("/calendar/comment-center", h.CommentCenterList)
+		user.POST("/calendar/comment-center/read", h.CommentCenterRead)
+
 		// 标签
 		user.GET("/tags", h.ListTags)
 		user.POST("/tags", h.CreateTag)
