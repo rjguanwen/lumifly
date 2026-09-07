@@ -45,6 +45,16 @@ func textToHTML(s string) string {
 	return strings.ReplaceAll(s, "\n", "<br>")
 }
 
+// contentDateISO 将内容自带的日期（YYYY-MM-DD）转为 ISO 时间，作为快照展示时间；
+// 传入空值或非日期时返回空字符串（调用方回退为原逻辑）。
+func contentDateISO(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) == 10 && s[4] == '-' && s[7] == '-' {
+		return s + "T00:00:00.000Z"
+	}
+	return ""
+}
+
 // ---------- 发布快照 ----------
 
 func (h *Handler) snapshot(userID uint, sourceType string, sourceID uint) (*model.Publication, string) {
@@ -64,6 +74,9 @@ func (h *Handler) snapshot(userID uint, sourceType string, sourceID uint) (*mode
 			p.Title = "日记 · " + r.RecordDate
 		}
 		p.Content = r.Content
+		if d := contentDateISO(r.RecordDate); d != "" {
+			p.CreatedAt = d
+		}
 	case model.PubMilestone:
 		var m model.Milestone
 		if err := h.db.Where("id = ? AND user_id = ?", sourceID, userID).First(&m).Error; err != nil {
@@ -75,6 +88,9 @@ func (h *Handler) snapshot(userID uint, sourceType string, sourceID uint) (*mode
 			"eventDate": m.EventDate, "category": m.Category, "importance": strconv.Itoa(m.Importance),
 		})
 		p.Meta = string(meta)
+		if d := contentDateISO(m.EventDate); d != "" {
+			p.CreatedAt = d
+		}
 	case model.PubIdea:
 		var i model.Idea
 		if err := h.db.Where("id = ? AND user_id = ?", sourceID, userID).First(&i).Error; err != nil {
@@ -82,6 +98,9 @@ func (h *Handler) snapshot(userID uint, sourceType string, sourceID uint) (*mode
 		}
 		p.Title = i.Title
 		p.Content = i.Content
+		if strings.TrimSpace(i.CreatedAt) != "" {
+			p.CreatedAt = i.CreatedAt
+		}
 	case model.PubBook:
 		var b model.Book
 		if err := h.db.Where("id = ? AND user_id = ?", sourceID, userID).First(&b).Error; err != nil {
@@ -99,6 +118,9 @@ func (h *Handler) snapshot(userID uint, sourceType string, sourceID uint) (*mode
 			"domain": b.Domain, "readYear": b.ReadYear, "recommend": b.Recommend, "status": b.Status,
 		})
 		p.Meta = string(meta)
+		if strings.TrimSpace(b.CreatedAt) != "" {
+			p.CreatedAt = b.CreatedAt
+		}
 	case model.PubQuick:
 		var q model.QuickNote
 		if err := h.db.Where("id = ? AND user_id = ?", sourceID, userID).First(&q).Error; err != nil {
@@ -195,7 +217,7 @@ func (h *Handler) Publish(c *gin.Context) {
 		// 撤回/驳回后修改源内容重新提交：重建快照并重新审查
 		if err := h.db.Model(&model.Publication{}).Where("id = ?", existed.ID).Updates(map[string]interface{}{
 			"title": pub.Title, "preview": pub.Preview, "content": pub.Content,
-			"author": pub.Author, "rating": pub.Rating, "meta": pub.Meta,
+			"author": pub.Author, "rating": pub.Rating, "meta": pub.Meta, "created_at": pub.CreatedAt,
 			"status": status, "review_categories": pub.ReviewCategories, "updated_at": model.NowISO(),
 		}).Error; err != nil {
 			serverError(c, "发布失败")
