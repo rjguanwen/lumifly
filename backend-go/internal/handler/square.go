@@ -310,23 +310,39 @@ func (h *Handler) ListSquare(c *gin.Context) {
 		limit = 20
 	}
 
-	var pubs []model.Publication
-	q := h.db.Model(&model.Publication{}).Where("status = ?", model.PubStatusPublished)
+	// 组装过滤条件（公开帖 + 分类/关键词/作者）
+	base := h.db.Model(&model.Publication{}).Where("status = ?", model.PubStatusPublished)
 	if typ != "" {
-		q = q.Where("source_type = ?", typ)
+		base = base.Where("source_type = ?", typ)
 	}
 	if keyword != "" {
 		like := "%" + keyword + "%"
-		q = q.Where("title LIKE ? OR preview LIKE ?", like, like)
+		base = base.Where("title LIKE ? OR preview LIKE ?", like, like)
 	}
 	if s := c.Query("userId"); s != "" {
 		if uid, err := strconv.ParseUint(s, 10, 64); err == nil && uid > 0 {
-			q = q.Where("user_id = ?", uid)
+			base = base.Where("user_id = ?", uid)
 		}
 	}
-	if err := q.Find(&pubs).Error; err != nil {
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
 		serverError(c, "查询失败")
 		return
+	}
+
+	var pubs []model.Publication
+	if sortBy == "hot" {
+		// 最热：需全量点赞数排序，保持原有逻辑
+		if err := base.Find(&pubs).Error; err != nil {
+			serverError(c, "查询失败")
+			return
+		}
+	} else {
+		// 最新：直接 SQL 分页，避免内容量大时一次加载全部
+		if err := base.Order("id DESC").Limit(limit).Offset((page - 1) * limit).Find(&pubs).Error; err != nil {
+			serverError(c, "查询失败")
+			return
+		}
 	}
 
 	// 组装（含统计与点赞态），并标注相对用户已读水位的“新”内容
@@ -342,22 +358,19 @@ func (h *Handler) ListSquare(c *gin.Context) {
 		sort.SliceStable(items, func(i, j int) bool {
 			return items[i]["likeCount"].(int64) > items[j]["likeCount"].(int64)
 		})
-	} else {
-		// latest: 按 id 降序（已由查询 id 乱序？需显式）
-		sort.SliceStable(items, func(i, j int) bool {
-			return items[i]["id"].(uint) > items[j]["id"].(uint)
-		})
+		// 分页
+		start := (page - 1) * limit
+		end := start + limit
+		if start > len(items) {
+			start = len(items)
+		}
+		if end > len(items) {
+			end = len(items)
+		}
+		items = items[start:end]
 	}
 
-	start := (page - 1) * limit
-	end := start + limit
-	if start > len(items) {
-		start = len(items)
-	}
-	if end > len(items) {
-		end = len(items)
-	}
-	c.JSON(200, gin.H{"items": items[start:end], "total": len(items), "page": page, "limit": limit})
+	c.JSON(200, gin.H{"items": items, "total": total, "page": page, "limit": limit})
 }
 
 // canAccessPub 判断某用户能否查看帖子（公开帖所有人可见；待审/驳回帖仅作者与审核员可见）。

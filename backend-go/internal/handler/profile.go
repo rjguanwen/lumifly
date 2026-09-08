@@ -30,7 +30,15 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 
 	updates := map[string]interface{}{"updated_at": model.NowISO()}
 	if req.DisplayName != nil && strings.TrimSpace(*req.DisplayName) != "" {
-		updates["display_name"] = strings.TrimSpace(*req.DisplayName)
+		name := strings.TrimSpace(*req.DisplayName)
+		var n int64
+		h.db.Model(&model.User{}).
+			Where("LOWER(display_name) = ? AND id <> ?", strings.ToLower(name), cu.ID).Count(&n)
+		if n > 0 {
+			fail(c, 409, "该昵称已被其他用户使用，请换一个")
+			return
+		}
+		updates["display_name"] = name
 	}
 	if req.BirthDate != nil {
 		if strings.TrimSpace(*req.BirthDate) == "" {
@@ -49,8 +57,8 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	}
 	if req.Signature != nil {
 		sig := strings.TrimSpace(*req.Signature)
-		if len([]rune(sig)) > 255 {
-			badRequest(c, "个性签名最多 255 字")
+		if len([]rune(sig)) > 80 {
+			badRequest(c, "个性签名最多 80 字")
 			return
 		}
 		updates["signature"] = sig

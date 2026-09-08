@@ -65,12 +65,12 @@
     <!-- 空态 -->
     <el-empty v-if="loaded && !items.length" description="广场暂时没有内容" />
 
-    <!-- 帖子瀑布流 -->
-    <div v-else class="columns-1 sm:columns-2 xl:columns-3 gap-4">
+    <!-- 帖子瀑布流：行优先填充（行内与行间均新→旧） -->
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
       <div
         v-for="p in items"
         :key="p.id"
-        class="mb-4 break-inside-avoid bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden cursor-pointer"
+        class="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden cursor-pointer"
         @click="openDetail(p)"
       >
         <!-- 头部：作者 + 类型 -->
@@ -135,15 +135,15 @@
       </div>
     </div>
 
-    <!-- 加载更多 -->
-    <div v-if="items.length < total" class="text-center">
-      <el-button :loading="loading" @click="loadMore">加载更多</el-button>
+    <!-- 滚动加载哨兵：接近底部自动加载下一页 -->
+    <div v-if="items.length < total" ref="sentinel" class="py-6 text-center text-sm text-gray-400">
+      {{ loading ? '加载中…' : '下拉加载更多' }}
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { friendApi, squareApi } from '../api'
 import { useAuthStore } from '../stores/auth'
@@ -159,6 +159,7 @@ const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
 const loaded = ref(false)
+const sentinel = ref(null)
 
 const typeFilter = ref('')
 const keyword = ref('')
@@ -271,6 +272,41 @@ async function toggleLike(p) {
 function openDetail(p) {
   router.push(`/square/${p.id}`)
 }
+
+// 滚动加载：当底部哨兵接近视口（剩余不足 320px）时自动加载下一页。
+// 滚动容器取自哨兵最近的 overflow 祖先（Element Plus 的 el-main），无则监听 window。
+function findScrollParent(el) {
+  while (el && el !== document.body) {
+    const s = window.getComputedStyle(el)
+    if (s.overflowY === 'auto' || s.overflowY === 'scroll') return el
+    el = el.parentElement
+  }
+  return window
+}
+
+let scrollEl = null
+function onNearBottom() {
+  if (loading.value || items.value.length >= total.value) return
+  const el = scrollEl === window ? document.documentElement : scrollEl
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 320) loadMore()
+}
+
+watch(
+  total,
+  async () => {
+    await nextTick()
+    if (items.value.length >= total.value || !sentinel.value) return
+    if (!scrollEl) {
+      scrollEl = findScrollParent(sentinel.value)
+      scrollEl.addEventListener('scroll', onNearBottom, { passive: true })
+    }
+    // 列表不足一屏时也自动补页，保证能继续滚动加载
+    onNearBottom()
+  },
+  { flush: 'post' },
+)
+
+onBeforeUnmount(() => scrollEl?.removeEventListener('scroll', onNearBottom))
 
 onMounted(() => {
   load()

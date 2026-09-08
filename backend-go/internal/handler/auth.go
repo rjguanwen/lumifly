@@ -157,6 +157,13 @@ func (h *Handler) Register(c *gin.Context) {
 		fail(c, 409, "该邮箱已注册")
 		return
 	}
+	// 昵称不允许重复（忽略大小写）
+	var nameN int64
+	h.db.Model(&model.User{}).Where("LOWER(display_name) = ?", strings.ToLower(req.DisplayName)).Count(&nameN)
+	if nameN > 0 {
+		fail(c, 409, "该昵称已被使用，请换一个")
+		return
+	}
 
 	now := model.NowISO()
 	u := &model.User{

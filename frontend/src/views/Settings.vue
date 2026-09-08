@@ -44,9 +44,9 @@
             v-model="form.signature"
             type="textarea"
             :rows="2"
-            maxlength="255"
+            maxlength="80"
             show-word-limit
-            placeholder="一句话介绍自己，会展示在你的广场内容中"
+            placeholder="一句话介绍自己，最多 80 字"
           />
         </el-form-item>
         <el-button type="primary" :loading="saving" @click="saveProfile">保存修改</el-button>
