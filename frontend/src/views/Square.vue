@@ -65,12 +65,14 @@
     <!-- 空态 -->
     <el-empty v-if="loaded && !items.length" description="广场暂时没有内容" />
 
-    <!-- 帖子流：自适应多列瀑布流（按列自然排布、铺满页面，卡片高度随内容） -->
-    <div v-else class="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
+    <!-- 帖子流：行序网格。整个页面新帖在上方行、旧帖在下方行；同一行内左→右从新到旧。
+         列表数据（items）按发布时间新→旧排列，grid 默认按行填充，因此天然满足上述行序。
+         严禁改回 columns 瀑布流（CSS columns 按列填充会打乱横向新旧次序）。 -->
+    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
       <div
         v-for="p in items"
         :key="p.id"
-        class="group mb-4 break-inside-avoid bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-lg transition-shadow overflow-hidden cursor-pointer"
+        class="group bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-lg transition-shadow overflow-hidden cursor-pointer"
         @click="openDetail(p)"
       >
         <!-- 有图卡片：缩小版封面（约为原高 2/3）+ 角标 -->
