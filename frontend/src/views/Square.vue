@@ -116,6 +116,23 @@
           </template>
 
           <p v-if="p.preview" class="mt-2 text-sm text-gray-600 leading-relaxed line-clamp-4">{{ p.preview }}</p>
+
+          <!-- 内容图片缩略（最多展示 2-3 张，让广场更生动） -->
+          <div
+            v-if="postImgs(p).length"
+            class="mt-2.5 grid gap-1.5"
+            :class="postImgs(p).length > 1 ? 'grid-cols-2' : 'grid-cols-1'"
+          >
+            <img
+              v-for="(src, i) in postImgs(p)"
+              :key="src + i"
+              :src="src"
+              loading="lazy"
+              class="w-full rounded-lg object-cover"
+              :class="postImgs(p).length > 1 ? 'h-32' : 'h-44'"
+              alt=""
+            />
+          </div>
         </div>
 
         <!-- 底部操作 -->
@@ -139,18 +156,24 @@
     <div v-if="items.length < total" ref="sentinel" class="py-6 text-center text-sm text-gray-400">
       {{ loading ? '加载中…' : '下拉加载更多' }}
     </div>
+
+    <!-- 帖子内容弹窗（支持 ESC 关闭） -->
+    <SquarePostDialog
+      v-model:visible="postDialogVisible"
+      :post-id="postDialogId"
+      @changed="load(true)"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { friendApi, squareApi } from '../api'
 import { useAuthStore } from '../stores/auth'
 import UserAvatar from '../components/UserAvatar.vue'
+import SquarePostDialog from '../components/SquarePostDialog.vue'
 import { squareTypes, squareTypeOf } from '../utils/squareMeta'
 
-const router = useRouter()
 const auth = useAuthStore()
 const myId = auth.user?.id
 
@@ -182,6 +205,29 @@ const authorOptions = computed(() => {
 })
 
 const tMeta = (p) => squareTypeOf(p.sourceType)
+
+// 帖子弹窗状态
+const postDialogVisible = ref(false)
+const postDialogId = ref(0)
+function openDetail(p) {
+  postDialogId.value = p.id
+  postDialogVisible.value = true
+}
+
+// 从快照正文提取图片，用于卡片缩略（最多前 3 张，带缓存）
+const imgCache = {}
+function extractContentImgs(html) {
+  if (!html) return []
+  const out = []
+  const re = /<img[^>]+src="([^"]+)"/g
+  let m
+  while ((m = re.exec(html)) && out.length < 3) out.push(m[1])
+  return out
+}
+function postImgs(p) {
+  if (!(p.id in imgCache)) imgCache[p.id] = extractContentImgs(p.content)
+  return imgCache[p.id]
+}
 
 async function loadFriends() {
   try {
@@ -267,10 +313,6 @@ async function toggleLike(p) {
     p.liked = r.liked
     p.likeCount = r.likeCount
   } catch { /* 忽略 */ }
-}
-
-function openDetail(p) {
-  router.push(`/square/${p.id}`)
 }
 
 // 滚动加载：当底部哨兵接近视口（剩余不足 320px）时自动加载下一页。
