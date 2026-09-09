@@ -65,89 +65,74 @@
     <!-- 空态 -->
     <el-empty v-if="loaded && !items.length" description="广场暂时没有内容" />
 
-    <!-- 帖子瀑布流：行优先填充（行内与行间均新→旧） -->
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+    <!-- 帖子流：自适应多列瀑布流（按列自然排布、铺满页面，卡片高度随内容） -->
+    <div v-else class="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
       <div
         v-for="p in items"
         :key="p.id"
-        class="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden cursor-pointer"
+        class="group mb-4 break-inside-avoid bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-lg transition-shadow overflow-hidden cursor-pointer"
         @click="openDetail(p)"
       >
-        <!-- 头部：作者 + 类型 -->
-        <div class="flex items-center gap-2.5 px-5 pt-4">
-          <UserAvatar :src="p.authorAvatar" :name="p.authorName" :size="32" />
-          <div class="min-w-0">
-            <div class="flex items-center gap-1.5">
-              <span
-                class="text-sm font-medium text-gray-800 truncate cursor-pointer hover:text-indigo-600"
-                :class="{ 'text-indigo-600': authorFilter?.id === p.userId }"
-                :title="authorFilter?.id === p.userId ? '正在筛选该作者' : '只看 TA 发布的内容'"
-                @click.stop="filterByAuthor(p)"
-              >{{ p.authorName }}</span>
-              <span v-if="p.userId === myId" class="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-500">我的</span>
-            </div>
-            <div class="text-xs text-gray-400">{{ fmtTime(p.createdAt) }}</div>
-            <p v-if="p.authorSignature" class="text-xs text-gray-400 italic truncate mt-0.5">{{ p.authorSignature }}</p>
-          </div>
-          <div class="flex-1" />
-          <span v-if="p.isNew" class="flex items-center gap-1 text-[11px] text-rose-500 shrink-0">
-            <span class="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_0_3px_rgba(244,63,94,0.15)]" />新
-          </span>
-          <span
-            class="text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 shrink-0"
-            :style="{ background: tMeta(p).bg, color: tMeta(p).color }"
-          ><el-icon :size="12"><component :is="tMeta(p).icon" /></el-icon>{{ tMeta(p).label }}</span>
-        </div>
-
-        <!-- 内容 -->
-        <div class="px-5 pt-3 pb-2">
-          <h3 class="text-base font-semibold text-gray-900 leading-snug">{{ p.title }}</h3>
-
-          <!-- 书籍附加信息 -->
-          <template v-if="p.sourceType === 'book'">
-            <div class="flex flex-wrap items-center gap-2 mt-2">
-              <span v-if="p.author" class="text-sm text-gray-500">{{ p.author }}</span>
-              <span v-if="p.rating" class="text-amber-400 text-sm">{{ '★'.repeat(p.rating) }}</span>
-            </div>
-            <div v-if="p.meta?.domain || p.meta?.readYear" class="flex gap-1.5 flex-wrap mt-1.5">
-              <span v-if="p.meta.domain" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{{ p.meta.domain }}</span>
-              <span v-if="p.meta.readYear" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{{ p.meta.readYear }}</span>
-            </div>
-          </template>
-
-          <p v-if="p.preview" class="mt-2 text-sm text-gray-600 leading-relaxed line-clamp-4">{{ p.preview }}</p>
-
-          <!-- 内容图片缩略（最多展示 2-3 张，让广场更生动） -->
-          <div
-            v-if="postImgs(p).length"
-            class="mt-2.5 grid gap-1.5"
-            :class="postImgs(p).length > 1 ? 'grid-cols-2' : 'grid-cols-1'"
-          >
+        <!-- 有图卡片：缩小版封面（约为原高 2/3）+ 角标 -->
+        <template v-if="postImgs(p).length">
+          <div class="relative overflow-hidden">
             <img
-              v-for="(src, i) in postImgs(p)"
-              :key="src + i"
-              :src="src"
+              :src="postImgs(p)[0]"
               loading="lazy"
-              class="w-full rounded-lg object-cover"
-              :class="postImgs(p).length > 1 ? 'h-32' : 'h-44'"
+              class="w-full aspect-[5/4] object-cover transition-transform duration-300 group-hover:scale-[1.03]"
               alt=""
             />
+            <span v-if="p.isNew" class="absolute left-2 top-2 px-1.5 py-0.5 rounded-md bg-rose-500 text-white text-[11px]">新</span>
+            <span
+              class="absolute right-2 top-2 px-1.5 py-0.5 rounded-md text-[11px] font-medium backdrop-blur"
+              :style="{ background: tMeta(p).color, color: '#fff' }"
+            >{{ tMeta(p).label }}</span>
+            <template v-if="p.sourceType === 'book'">
+              <span v-if="p.author" class="absolute left-2 bottom-2 text-[11px] text-white drop-shadow px-1.5 py-0.5 rounded bg-black/35 backdrop-blur">{{ p.author }}</span>
+              <span v-if="p.rating" class="absolute right-2 bottom-2 text-[12px] text-amber-300 drop-shadow">{{ '★'.repeat(Math.min(p.rating, 5)) }}</span>
+            </template>
           </div>
+        </template>
+
+        <!-- 纯文字卡片：紧凑头部条（类型 + 新标记），正文撑内容 -->
+        <div v-else class="px-3 pt-2.5 flex items-center gap-2">
+          <el-icon :size="15" :color="tMeta(p).color"><component :is="tMeta(p).icon" /></el-icon>
+          <span
+            class="text-[11px] px-1.5 py-0.5 rounded"
+            :style="{ background: tMeta(p).bg, color: tMeta(p).color }"
+          >{{ tMeta(p).label }}</span>
+          <span v-if="p.isNew" class="ml-auto flex items-center gap-1 text-[10px] text-rose-500">
+            <i class="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />新
+          </span>
         </div>
 
-        <!-- 底部操作 -->
-        <div class="flex items-center gap-1 px-4 py-2 border-t border-gray-50 bg-gray-50/60">
-          <button
-            type="button"
-            class="btn-act"
-            :class="p.liked ? 'is-active' : ''"
-            @click.stop="toggleLike(p)"
-          >{{ p.liked ? '♥' : '♡' }} {{ p.likeCount || 0 }}</button>
-          <button type="button" class="btn-act" @click.stop="openDetail(p)">
-            <el-icon :size="13"><ChatDotRound /></el-icon> {{ p.commentCount || 0 }}
-          </button>
-          <div class="flex-1" />
-          <span class="text-xs text-blue-500">查看全文 →</span>
+        <!-- 文案区 -->
+        <div class="px-3 py-2.5">
+          <h3 class="text-[15px] font-semibold text-gray-900 leading-snug line-clamp-2">{{ p.title || p.preview }}</h3>
+          <p v-if="!postImgs(p).length && p.preview" class="mt-1 text-[13px] text-gray-500 leading-relaxed line-clamp-3">{{ p.preview }}</p>
+          <div class="mt-2 flex items-center gap-1.5">
+            <UserAvatar :src="p.authorAvatar" :name="p.authorName" :size="18" />
+            <span
+              class="text-xs text-gray-500 truncate cursor-pointer hover:text-indigo-600"
+              :class="{ 'text-indigo-600': authorFilter?.id === p.userId }"
+              :title="authorFilter?.id === p.userId ? '正在筛选该作者' : '只看 TA 发布的内容'"
+              @click.stop="filterByAuthor(p)"
+            >{{ p.authorName }}</span>
+            <span v-if="p.userId === myId" class="text-[10px] px-1 rounded bg-blue-50 text-blue-500">我的</span>
+            <span class="flex-1" />
+            <span class="text-xs text-gray-400">{{ fmtTime(p.createdAt) }}</span>
+          </div>
+          <div class="mt-0.5 flex items-center text-xs text-gray-400">
+            <button
+              type="button"
+              class="btn-act like-btn"
+              :class="{ 'is-liked': p.liked }"
+              @click.stop="toggleLike(p)"
+            ><i class="heart" aria-hidden="true">{{ p.liked ? '♥' : '♡' }}</i> {{ p.likeCount || 0 }}</button>
+            <button type="button" class="btn-act comment-btn" @click.stop="openDetail(p)">
+              <el-icon :size="14"><ChatDotRound /></el-icon> {{ p.commentCount || 0 }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -357,26 +342,51 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 点赞 / 评论小按钮：无边框浅灰文字，悬浮时浅色圆底 + 变色 */
 .btn-act {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 10px;
-  border: none;
+  padding: 5px 9px;
+  margin: -4px -4px;
+  border: 0;
   background: transparent;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #6b7280;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  color: #9ca3af;
   cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .btn-act:hover {
-  background: #fff;
-  color: #d97706;
+  background-color: #f3f4f6;
 }
 
-.btn-act.is-active {
-  color: #ef4444;
+.btn-act:active {
+  transform: scale(0.92);
+}
+
+.like-btn .heart {
+  font-style: normal;
+  font-size: 13px;
+  transition: transform 0.15s ease;
+}
+
+.like-btn:hover {
+  color: #f43f5e;
+}
+
+.like-btn.is-liked {
+  color: #f43f5e;
+}
+
+.like-btn.is-liked .heart {
+  transform: scale(1.08);
+}
+
+.comment-btn:hover {
+  color: #4b5563;
 }
 </style>

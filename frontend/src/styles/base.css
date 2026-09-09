@@ -8,6 +8,24 @@
   padding: 0;
 }
 
+/* 补充原生按钮 reset（项目关闭了 Tailwind preflight，需手动去掉浏览器默认灰底/黑边）
+   带类的 Element Plus 组件按钮不受影响（类优先级更高） */
+button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+button:focus {
+  outline: none;
+}
+button:focus-visible {
+  outline: 2px solid #4a6cf7;
+  outline-offset: 2px;
+}
+
 html,
 body,
 #app {

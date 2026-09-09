@@ -170,7 +170,7 @@ func (h *Handler) Register(c *gin.Context) {
 		Email:            req.Email,
 		PasswordHash:     model.HashPassword(req.Password),
 		DisplayName:      req.DisplayName,
-		ExpectedLifespan: 80,
+		ExpectedLifespan: 99,
 		Role:             model.RoleUser,
 		IsActive:         true,
 		SquareReadAt:     now,

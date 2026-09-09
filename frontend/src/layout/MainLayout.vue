@@ -1,35 +1,44 @@
 <template>
   <el-container class="app-layout">
-    <!-- 侧边栏 -->
-    <el-aside width="220px" class="app-aside">
+    <!-- 侧边栏（支持折叠，窄屏自动收起） -->
+    <el-aside :width="collapsed ? '64px' : '220px'" class="app-aside">
       <div class="logo">
-        <div class="flex items-center gap-2.5">
-          <BrandLogo :size="38" />
-          <div>
+        <div class="flex items-center gap-2.5" :class="collapsed ? 'justify-center' : ''">
+          <BrandLogo :size="collapsed ? 34 : 38" />
+          <div v-if="!collapsed">
             <div class="logo-title">飞光</div>
             <div class="logo-sub">人生如逆旅　我亦是行人</div>
           </div>
         </div>
       </div>
-      <el-menu :default-active="activeMenu" router class="app-menu" @select="handleSelect">
+      <el-menu
+        :default-active="activeMenu"
+        router
+        class="app-menu"
+        :collapse="collapsed"
+        :collapse-transition="false"
+        @select="handleSelect"
+      >
         <el-menu-item v-for="item in navItems" :key="item.path" :index="item.path">
           <el-icon><component :is="item.icon" /></el-icon>
-          <span class="flex-1 flex items-center gap-1.5">
-            <span class="flex-1">{{ item.label }}</span>
-            <i v-if="menuDot(item)" class="menu-dot" />
-          </span>
+          <template #title>
+            <span class="flex-1 flex items-center gap-1.5">
+              <span class="flex-1">{{ item.label }}</span>
+              <i v-if="menuDot(item)" class="menu-dot" />
+            </span>
+          </template>
         </el-menu-item>
       </el-menu>
       <div class="aside-footer">
-        <el-menu router class="app-menu">
+        <el-menu router class="app-menu" :collapse="collapsed" :collapse-transition="false">
           <el-menu-item index="/settings">
             <el-icon><Setting /></el-icon>
-            <span>设置</span>
+            <template #title><span>设置</span></template>
           </el-menu-item>
         </el-menu>
-        <el-button text class="logout-btn" @click="handleLogout">
+        <el-button text class="logout-btn" :class="{ 'is-collapsed': collapsed }" @click="handleLogout">
           <el-icon><SwitchButton /></el-icon>
-          <span>退出登录</span>
+          <span v-if="!collapsed">退出登录</span>
         </el-button>
       </div>
     </el-aside>
@@ -37,7 +46,17 @@
     <!-- 主区域 -->
     <el-container class="app-main">
       <el-header class="app-header">
-        <div class="header-title">{{ route.meta.title || '' }}</div>
+        <div class="flex items-center gap-2">
+          <el-button
+            text
+            class="!mr-0"
+            :title="collapsed ? '展开菜单' : '收起菜单'"
+            @click="collapsed = !collapsed"
+          >
+            <el-icon :size="17"><component :is="collapsed ? 'Expand' : 'Fold'" /></el-icon>
+          </el-button>
+          <div class="header-title">{{ route.meta.title || '' }}</div>
+        </div>
         <div class="flex items-center gap-2">
           <UserAvatar :src="auth.user?.avatarUrl" :name="auth.user?.displayName" :size="28" />
           <span class="text-sm text-gray-600">{{ auth.user?.displayName }}</span>
@@ -51,7 +70,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useBadgeStore } from '../stores/badges'
@@ -75,6 +94,19 @@ function menuDot(item) {
 }
 onMounted(() => badge.refresh())
 watch(() => route.path, () => badge.refresh())
+
+// 侧栏折叠：窄屏（<1280px）自动收起，宽屏展开；也可手动切换
+const collapsed = ref(false)
+let mediaQuery = null
+function syncCollapsed(e) {
+  collapsed.value = e.matches
+}
+onMounted(() => {
+  mediaQuery = window.matchMedia('(max-width: 1279px)')
+  collapsed.value = mediaQuery.matches
+  mediaQuery.addEventListener('change', syncCollapsed)
+})
+onBeforeUnmount(() => mediaQuery?.removeEventListener('change', syncCollapsed))
 
 // 详情子路由（/records/:id 等）时高亮对应菜单
 const activeMenu = computed(() => {
@@ -198,5 +230,36 @@ async function handleLogout() {
   background: #f43f5e;
   box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.18);
   flex-shrink: 0;
+}
+
+/* 侧栏折叠 */
+.app-aside {
+  transition: width 0.2s ease;
+  overflow: hidden;
+}
+
+.logo {
+  padding: 14px 12px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.app-menu.el-menu--collapse {
+  width: 100%;
+}
+
+.aside-footer .el-menu {
+  border-right: none;
+}
+
+.logout-btn.is-collapsed {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.logout-btn.is-collapsed .el-icon {
+  margin-right: 0;
 }
 </style>
