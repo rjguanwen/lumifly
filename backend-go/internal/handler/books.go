@@ -34,15 +34,23 @@ func (h *Handler) bookJSON(b *model.Book) gin.H {
 	}
 }
 
-// ListBooks 书籍列表（支持 status/domain/tag_id/keyword 过滤）。
+// ListBooks 书籍列表（支持 status/domain/tag_id/keyword 过滤 + 分页，供前端滚动加载）。
 func (h *Handler) ListBooks(c *gin.Context) {
 	cu := currentUser(c)
 	status := c.Query("status")
 	domain := c.Query("domain")
 	tagID := c.Query("tag_id")
 	keyword := strings.TrimSpace(c.Query("keyword"))
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
 
-	q := h.db.Where("user_id = ?", cu.ID)
+	q := h.db.Model(&model.Book{}).Where("user_id = ?", cu.ID)
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
@@ -58,8 +66,14 @@ func (h *Handler) ListBooks(c *gin.Context) {
 		q = q.Where("name LIKE ? OR author LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
 	}
 
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		serverError(c, "查询失败")
+		return
+	}
+
 	var all []model.Book
-	if err := q.Order("id DESC").Find(&all).Error; err != nil {
+	if err := q.Order("id DESC").Offset((page - 1) * limit).Limit(limit).Find(&all).Error; err != nil {
 		serverError(c, "查询失败")
 		return
 	}
@@ -67,7 +81,7 @@ func (h *Handler) ListBooks(c *gin.Context) {
 	for i := range all {
 		items = append(items, h.bookJSON(&all[i]))
 	}
-	c.JSON(200, gin.H{"items": items, "total": len(items)})
+	c.JSON(200, gin.H{"items": items, "total": total, "page": page, "limit": limit})
 }
 
 // GetBook 书籍详情。

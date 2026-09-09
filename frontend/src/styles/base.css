@@ -257,3 +257,22 @@ body {
   text-align: left;
   overflow: hidden;
 }
+
+/* 加载骨架 shimmer 动画关键帧（全局提供）。
+   ⚠️ 注意：.skl 占位类不能定义在这里——本项目 base.css 经 Tailwind/PostCSS 处理后，
+   文件顶部普通规则外的“未归类”顶层规则会被丢弃（实测丢失）。.skl 需在用到它的组件
+   的 scoped style 内各自定义（Square/Records/Books.vue 已有）。 */
+@keyframes skl-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skl {
+    animation: none;
+  }
+}

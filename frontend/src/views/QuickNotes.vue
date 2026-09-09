@@ -11,8 +11,24 @@
       </el-button>
     </div>
 
+    <!-- 首屏加载骨架 -->
+    <div v-if="loading && !items.length" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4" aria-hidden="true">
+      <div v-for="i in 6" :key="'sk' + i" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+        <div class="skl h-4 w-11/12" />
+        <div class="skl h-4 w-3/4" />
+        <div class="flex gap-1.5">
+          <div class="skl h-5 w-12 rounded-full" />
+          <div class="skl h-5 w-12 rounded-full" />
+        </div>
+        <div class="flex items-center justify-between pt-1">
+          <div class="skl h-3 w-16" />
+          <div class="skl h-6 w-14 rounded-full" />
+        </div>
+      </div>
+    </div>
+
     <!-- 平铺卡片 -->
-    <div v-if="items.length" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+    <div v-else-if="items.length" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
       <div
         v-for="n in items"
         :key="n.id"
@@ -82,7 +98,15 @@
         </div>
       </div>
     </div>
-    <el-empty v-else description="还没有语录，把脑海中的话随手记下来吧" />
+    <el-empty v-else-if="loaded && !items.length" description="还没有语录，把脑海中的话随手记下来吧" />
+
+    <!-- 滚动加载：接近底部自动追加下一页 -->
+    <div v-if="items.length && items.length < total" ref="sentinel" class="py-4 text-center text-sm text-gray-400">
+      {{ loading ? '加载中…' : '继续下滑加载更多' }}
+    </div>
+    <div v-if="items.length && items.length >= total && total > 0" class="py-4 text-center text-xs text-gray-300">
+      — 已经到底啦 —
+    </div>
 
     <!-- 新建 / 编辑弹窗 -->
     <el-dialog v-model="showForm" width="620px" top="8vh" destroy-on-close>
@@ -122,18 +146,18 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import TagInput from '../components/TagInput.vue'
 import { quickNoteApi, squareApi } from '../api'
+import { useInfiniteScroll } from '../composables/useInfiniteScroll'
 
 const route = useRoute()
 const router = useRouter()
 const showForm = ref(false)
 const saving = ref(false)
 const editingId = ref(null)
-const items = ref([])
 const form = reactive({ content: '', tagIds: [] })
 
 // 发布到广场的状态映射 id -> { id: publicationId, status }
@@ -145,15 +169,14 @@ function fmtDate(s) {
   return s.slice(0, 10)
 }
 
-async function load() {
-  try {
-    const data = await quickNoteApi.list()
-    items.value = data.items || []
-  } catch {
-    /* 忽略 */
-  }
-  await loadPubState()
-}
+// 分页滚动加载：整页刷新调用 load()，滚动到底由内部自动追加下一页
+const { items, total, loading, loaded, sentinel, load } = useInfiniteScroll(
+  (params) => quickNoteApi.list(params),
+  { pageSize: 24 },
+)
+
+// 列表（含滚动追加）变化后刷新每条语录的广场发布状态
+watch(items, () => { loadPubState() })
 
 async function loadPubState() {
   try {
@@ -307,3 +330,20 @@ async function pendingNote(note) {
   }
 }
 </script>
+
+<style scoped>
+/* 加载骨架占位块（shimmer 动效由 base.css 全局 @keyframes skl-shimmer 提供）
+   不要依赖 base.css 的全局 .skl（Tailwind 处理后该顶层规则会丢失），必须在 scoped 内定义 */
+.skl {
+  border-radius: 6px;
+  background-color: #e2e8f0;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 220% 100%;
+  animation: skl-shimmer 1.4s ease-in-out infinite;
+}
+</style>

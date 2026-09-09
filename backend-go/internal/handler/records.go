@@ -79,7 +79,7 @@ func (h *Handler) recordDetail(recordID uint) gin.H {
 	}
 }
 
-// ListRecords 记录列表（支持 from/to/mood 过滤 + 分页）。
+// ListRecords 记录列表（支持 from/to/mood 过滤 + 分页，供前端滚动加载）。
 func (h *Handler) ListRecords(c *gin.Context) {
 	cu := currentUser(c)
 	from := c.Query("from")
@@ -94,8 +94,7 @@ func (h *Handler) ListRecords(c *gin.Context) {
 		limit = 20
 	}
 
-	var all []model.Record
-	q := h.db.Where("user_id = ?", cu.ID).Order("record_date DESC")
+	q := h.db.Model(&model.Record{}).Where("user_id = ?", cu.ID)
 	if from != "" {
 		q = q.Where("record_date >= ?", from)
 	}
@@ -105,23 +104,18 @@ func (h *Handler) ListRecords(c *gin.Context) {
 	if mood != "" {
 		q = q.Where("mood = ?", mood)
 	}
-	if err := q.Find(&all).Error; err != nil {
+
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
 		serverError(c, "查询失败")
 		return
 	}
 
-	var total int64
-	h.db.Model(&model.Record{}).Where("user_id = ?", cu.ID).Count(&total)
-
-	start := (page - 1) * limit
-	end := start + limit
-	if start > len(all) {
-		start = len(all)
+	var paged []model.Record
+	if err := q.Order("record_date DESC, id DESC").Offset((page - 1) * limit).Limit(limit).Find(&paged).Error; err != nil {
+		serverError(c, "查询失败")
+		return
 	}
-	if end > len(all) {
-		end = len(all)
-	}
-	paged := all[start:end]
 
 	items := make([]gin.H, 0, len(paged))
 	for _, r := range paged {

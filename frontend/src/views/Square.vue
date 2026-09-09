@@ -62,8 +62,30 @@
       </el-tag>
     </div>
 
+    <!-- 首屏加载骨架（初载或筛选重置时内容为空、正在请求） -->
+    <div v-if="loading && !items.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start" aria-hidden="true">
+      <div
+        v-for="i in 8"
+        :key="'sk' + i"
+        class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"
+      >
+        <div class="skl w-full aspect-[5/4] rounded-none" />
+        <div class="p-3 space-y-2">
+          <div class="skl h-4 w-5/6" />
+          <div class="skl h-3 w-2/3" />
+          <div class="flex items-center gap-2 pt-1">
+            <div class="skl rounded-full w-4 h-4 shrink-0" />
+            <div class="skl h-3 w-16" />
+            <div class="flex-1" />
+            <div class="skl h-3 w-10" />
+            <div class="skl h-3 w-10" />
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 空态 -->
-    <el-empty v-if="loaded && !items.length" description="广场暂时没有内容" />
+    <el-empty v-else-if="loaded && !items.length" description="广场暂时没有内容" />
 
     <!-- 帖子流：行序网格。整个页面新帖在上方行、旧帖在下方行；同一行内左→右从新到旧。
          列表数据（items）按发布时间新→旧排列，grid 默认按行填充，因此天然满足上述行序。
@@ -268,6 +290,8 @@ function fmtTime(s) {
 async function load(reset = true) {
   if (loading.value) return
   loading.value = true
+  // 整页刷新（初载/切换分类/搜索/换作者）时先清空，让骨架屏接管；分页追加不在此列
+  if (reset) items.value = []
   try {
     const params = { sort: sortBy.value, page: reset ? 1 : page.value + 1, limit: 24 }
     if (typeFilter.value) params.type = typeFilter.value
@@ -344,6 +368,22 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 加载骨架占位块（shimmer 动效由 base.css 全局 @keyframes skl-shimmer 提供）
+   注意：不要依赖 base.css 的全局 .skl（Tailwind 处理后该顶层规则会丢失），
+   必须在组件 scoped 内重新定义 */
+.skl {
+  border-radius: 6px;
+  background-color: #e2e8f0;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 220% 100%;
+  animation: skl-shimmer 1.4s ease-in-out infinite;
+}
+
 /* 点赞 / 评论小按钮：无边框浅灰文字，悬浮时浅色圆底 + 变色 */
 .btn-act {
   display: inline-flex;

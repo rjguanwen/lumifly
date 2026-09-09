@@ -106,7 +106,7 @@ export const planApi = {
 
 // ===== 想法灵感 =====
 export const ideaApi = {
-  list: () => api.get('/ideas'),
+  list: (params) => api.get('/ideas', { params }),
   get: (id) => api.get(`/ideas/${id}`),
   create: (data) => api.post('/ideas', data),
   update: (id, data) => api.put(`/ideas/${id}`, data),
@@ -115,7 +115,7 @@ export const ideaApi = {
 
 // ===== 速记语录 =====
 export const quickNoteApi = {
-  list: () => api.get('/quick-notes'),
+  list: (params) => api.get('/quick-notes', { params }),
   create: (data) => api.post('/quick-notes', data),
   update: (id, data) => api.put(`/quick-notes/${id}`, data),
   remove: (id) => api.delete(`/quick-notes/${id}`),

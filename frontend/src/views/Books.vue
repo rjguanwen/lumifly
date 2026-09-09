@@ -36,8 +36,26 @@
       <el-button @click="load">搜索</el-button>
     </div>
 
+    <!-- 首屏加载骨架 -->
+    <div v-if="loading && !items.length" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4" aria-hidden="true">
+      <div v-for="i in 6" :key="'sk' + i" class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div class="skl h-1.5 rounded-none" />
+        <div class="p-5 space-y-3">
+          <div class="skl h-4 w-3/4" />
+          <div class="skl h-3 w-2/5" />
+          <div class="flex items-center gap-2">
+            <div class="skl h-5 w-14 rounded-full" />
+            <div class="skl h-5 w-14 rounded-full" />
+          </div>
+          <div class="skl h-3 w-full" />
+          <div class="skl h-3 w-5/6" />
+          <div class="skl h-3 w-2/3" />
+        </div>
+      </div>
+    </div>
+
     <!-- 书籍卡片 -->
-    <div v-if="items.length" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+    <div v-else-if="items.length" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
       <div
         v-for="book in items"
         :key="book.id"
@@ -85,7 +103,15 @@
         </div>
       </div>
     </div>
-    <el-empty v-else description="还没有书籍记录，添加你的第一本书吧" />
+    <el-empty v-else-if="loaded && !items.length" description="还没有书籍记录，添加你的第一本书吧" />
+
+    <!-- 滚动加载：接近底部自动追加下一页 -->
+    <div v-if="items.length && items.length < total" ref="sentinel" class="py-4 text-center text-sm text-gray-400">
+      {{ loading ? '加载中…' : '继续下滑加载更多' }}
+    </div>
+    <div v-if="items.length && items.length >= total && total > 0" class="py-4 text-center text-xs text-gray-300">
+      — 已经到底啦 —
+    </div>
 
     <!-- 新建/编辑弹窗 -->
     <el-dialog v-model="showForm" width="920px" top="5vh" destroy-on-close class="editor-dialog">
@@ -159,13 +185,13 @@ import TagInput from '../components/TagInput.vue'
 import StarRating from '../components/StarRating.vue'
 import DomainManageDialog from '../components/DomainManageDialog.vue'
 import { bookApi, bookDomainApi } from '../api'
+import { useInfiniteScroll } from '../composables/useInfiniteScroll'
 
 const route = useRoute()
 const router = useRouter()
 const showForm = ref(false)
 const saving = ref(false)
 const editingId = ref(null)
-const items = ref([])
 
 const filterStatus = ref('')
 const filterDomain = ref('')
@@ -207,16 +233,17 @@ const form = reactive({
   tagIds: [],
 })
 
-async function load() {
-  try {
-    const params = {}
-    if (filterStatus.value) params.status = filterStatus.value
-    if (filterDomain.value) params.domain = filterDomain.value
-    if (keyword.value.trim()) params.keyword = keyword.value.trim()
-    const data = await bookApi.list(params)
-    items.value = data.items || []
-  } catch { /* 忽略 */ }
-}
+// 分页滚动加载：整页刷新调用 load()，滚动到底由内部自动追加下一页
+const { items, total, loading, loaded, sentinel, load } = useInfiniteScroll(
+  (params) =>
+    bookApi.list({
+      ...params,
+      ...(filterStatus.value ? { status: filterStatus.value } : {}),
+      ...(filterDomain.value ? { domain: filterDomain.value } : {}),
+      ...(keyword.value.trim() ? { keyword: keyword.value.trim() } : {}),
+    }),
+  { pageSize: 24 },
+)
 
 async function handleEditQuery() {
   if (!route.query.edit) return
@@ -321,3 +348,20 @@ async function deleteBook(id) {
   } catch { /* 忽略 */ }
 }
 </script>
+
+<style scoped>
+/* 加载骨架占位块（shimmer 动效由 base.css 全局 @keyframes skl-shimmer 提供）
+   不要依赖 base.css 的全局 .skl（Tailwind 处理后该顶层规则会丢失），必须在 scoped 内定义 */
+.skl {
+  border-radius: 6px;
+  background-color: #e2e8f0;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 220% 100%;
+  animation: skl-shimmer 1.4s ease-in-out infinite;
+}
+</style>

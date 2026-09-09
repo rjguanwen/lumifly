@@ -34,11 +34,27 @@ func (h *Handler) ideaDetail(ideaID uint) gin.H {
 	}
 }
 
-// ListIdeas 灵感列表。
+// ListIdeas 灵感列表（支持分页，供前端滚动加载）。
 func (h *Handler) ListIdeas(c *gin.Context) {
 	cu := currentUser(c)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	q := h.db.Model(&model.Idea{}).Where("user_id = ?", cu.ID)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		serverError(c, "查询失败")
+		return
+	}
+
 	var all []model.Idea
-	if err := h.db.Where("user_id = ?", cu.ID).Order("created_at DESC").Find(&all).Error; err != nil {
+	if err := q.Order("id DESC").Offset((page - 1) * limit).Limit(limit).Find(&all).Error; err != nil {
 		serverError(c, "查询失败")
 		return
 	}
@@ -46,7 +62,7 @@ func (h *Handler) ListIdeas(c *gin.Context) {
 	for _, i := range all {
 		items = append(items, h.ideaDetail(i.ID))
 	}
-	c.JSON(200, gin.H{"items": items, "total": len(items)})
+	c.JSON(200, gin.H{"items": items, "total": total, "page": page, "limit": limit})
 }
 
 // GetIdea 灵感详情。

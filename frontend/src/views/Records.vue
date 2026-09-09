@@ -10,8 +10,26 @@
       </el-button>
     </div>
 
+    <!-- 首屏加载骨架 -->
+    <div v-if="loading && !items.length" class="space-y-4" aria-hidden="true">
+      <div v-for="i in 5" :key="'sk' + i" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex-1 space-y-2.5">
+            <div class="skl h-3 w-24" />
+            <div class="skl h-4 w-2/3" />
+            <div class="skl h-3 w-full" />
+            <div class="skl h-3 w-4/5" />
+          </div>
+          <div class="flex gap-2 shrink-0 pt-1">
+            <div class="skl rounded-full w-7 h-7" />
+            <div class="skl rounded-full w-7 h-7" />
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 列表 -->
-    <div v-if="items.length" class="space-y-4">
+    <div v-else-if="items.length" class="space-y-4">
       <el-card v-for="record in items" :key="record.id" shadow="hover" class="!rounded-2xl group">
         <div class="flex items-start justify-between">
           <div class="flex-1 min-w-0 cursor-pointer" @click="viewRecord(record)">
@@ -41,7 +59,15 @@
         </div>
       </el-card>
     </div>
-    <el-empty v-else description="还没有日记，开始记录今天的生活吧" />
+    <el-empty v-else-if="loaded && !items.length" description="还没有日记，开始记录今天的生活吧" />
+
+    <!-- 滚动加载：接近底部自动追加下一页 -->
+    <div v-if="items.length && items.length < total" ref="sentinel" class="py-4 text-center text-sm text-gray-400">
+      {{ loading ? '加载中…' : '继续下滑加载更多' }}
+    </div>
+    <div v-if="items.length && items.length >= total && total > 0" class="py-4 text-center text-xs text-gray-300">
+      — 已经到底啦 —
+    </div>
 
     <!-- 新建/编辑弹窗 -->
     <el-dialog v-model="showForm" width="920px" top="5vh" destroy-on-close class="editor-dialog">
@@ -96,13 +122,13 @@ import TagInput from '../components/TagInput.vue'
 import MoodPicker from '../components/MoodPicker.vue'
 import { recordApi } from '../api'
 import { moodEmoji } from '../utils/helpers'
+import { useInfiniteScroll } from '../composables/useInfiniteScroll'
 
 const route = useRoute()
 const router = useRouter()
 const showForm = ref(false)
 const saving = ref(false)
 const editingId = ref(null)
-const items = ref([])
 
 const form = reactive({
   title: '',
@@ -115,17 +141,16 @@ const form = reactive({
   mediaObjects: [],
 })
 
-async function load() {
-  try {
-    const params = { limit: 100 }
-    if (route.query.from) params.from = route.query.from
-    if (route.query.to) params.to = route.query.to
-    const data = await recordApi.list(params)
-    items.value = data.items || []
-  } catch {
-    /* 忽略 */
-  }
-}
+// 分页滚动加载：整页刷新调用 load()，滚动到底由内部自动追加下一页
+const { items, total, loading, loaded, sentinel, load } = useInfiniteScroll(
+  (params) =>
+    recordApi.list({
+      ...params,
+      ...(route.query.from ? { from: route.query.from } : {}),
+      ...(route.query.to ? { to: route.query.to } : {}),
+    }),
+  { pageSize: 30 },
+)
 
 async function handleEditQuery() {
   if (!route.query.edit) return
@@ -229,3 +254,20 @@ async function deleteRecord(id) {
   }
 }
 </script>
+
+<style scoped>
+/* 加载骨架占位块（shimmer 动效由 base.css 全局 @keyframes skl-shimmer 提供）
+   不要依赖 base.css 的全局 .skl（Tailwind 处理后该顶层规则会丢失），必须在 scoped 内定义 */
+.skl {
+  border-radius: 6px;
+  background-color: #e2e8f0;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 220% 100%;
+  animation: skl-shimmer 1.4s ease-in-out infinite;
+}
+</style>

@@ -54,11 +54,27 @@ func validateQuickNote(content string) string {
 	return ""
 }
 
-// ListQuickNotes 速记语录列表（最新的在前）。
+// ListQuickNotes 速记语录列表（最新的在前，支持分页，供前端滚动加载）。
 func (h *Handler) ListQuickNotes(c *gin.Context) {
 	cu := currentUser(c)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	q := h.db.Model(&model.QuickNote{}).Where("user_id = ?", cu.ID)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		serverError(c, "查询失败")
+		return
+	}
+
 	var all []model.QuickNote
-	if err := h.db.Where("user_id = ?", cu.ID).Order("id DESC").Find(&all).Error; err != nil {
+	if err := q.Order("id DESC").Offset((page - 1) * limit).Limit(limit).Find(&all).Error; err != nil {
 		serverError(c, "查询失败")
 		return
 	}
@@ -66,7 +82,7 @@ func (h *Handler) ListQuickNotes(c *gin.Context) {
 	for _, n := range all {
 		items = append(items, h.quickNoteDetail(n.ID))
 	}
-	c.JSON(200, gin.H{"items": items, "total": len(items)})
+	c.JSON(200, gin.H{"items": items, "total": total, "page": page, "limit": limit})
 }
 
 // CreateQuickNote 新建速记语录。
