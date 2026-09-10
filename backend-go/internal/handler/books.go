@@ -5,18 +5,13 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"lumiflybackend/internal/model"
 )
 
-// bookJSON 书籍详情（含标签）。
+// bookJSON 书籍详情（含书评与标签）。详情/新建/更新接口使用。
 func (h *Handler) bookJSON(b *model.Book) gin.H {
-	var links []model.BookTag
-	h.db.Where("book_id = ?", b.ID).Find(&links)
-	ids := make([]uint, 0, len(links))
-	for _, l := range links {
-		ids = append(ids, l.TagID)
-	}
 	return gin.H{
 		"id":        b.ID,
 		"userId":    b.UserID,
@@ -30,8 +25,75 @@ func (h *Handler) bookJSON(b *model.Book) gin.H {
 		"review":    b.Review,
 		"createdAt": b.CreatedAt,
 		"updatedAt": b.UpdatedAt,
-		"tags":      h.tagsByIDs(ids),
+		"tags":      h.tagsByIDs(bTagsIDs(h.db, b.ID)),
 	}
+}
+
+// bTagsIDs 查询一本书的标签关联 id 列表。
+func bTagsIDs(db *gorm.DB, bookID uint) []uint {
+	var links []model.BookTag
+	db.Where("book_id = ?", bookID).Find(&links)
+	ids := make([]uint, 0, len(links))
+	for _, l := range links {
+		ids = append(ids, l.TagID)
+	}
+	return ids
+}
+
+// bookCardJSON 书籍列表卡片（不含书评大字段，减少列表响应体积）。
+func bookCardJSON(b *model.Book, tags []gin.H) gin.H {
+	return gin.H{
+		"id":        b.ID,
+		"userId":    b.UserID,
+		"name":      b.Name,
+		"author":    b.Author,
+		"domain":    b.Domain,
+		"status":    b.Status,
+		"rating":    b.Rating,
+		"readYear":  b.ReadYear,
+		"recommend": b.Recommend,
+		"createdAt": b.CreatedAt,
+		"updatedAt": b.UpdatedAt,
+		"tags":      tags,
+	}
+}
+
+// bookTagsByIDs 批量加载多本书的标签（book_id -> tags JSON），
+// 用 2 条 SQL 替代逐本查询，避免列表 N+1 慢查询。
+func (h *Handler) bookTagsByIDs(bookIDs []uint) map[uint][]gin.H {
+	out := make(map[uint][]gin.H, len(bookIDs))
+	if len(bookIDs) == 0 {
+		return out
+	}
+	var links []model.BookTag
+	h.db.Where("book_id IN ?", bookIDs).Find(&links)
+	if len(links) == 0 {
+		return out
+	}
+	tagIDSet := make(map[uint]struct{}, len(links))
+	order := make([]uint, 0, len(links))
+	for _, l := range links {
+		if _, ok := tagIDSet[l.TagID]; !ok {
+			tagIDSet[l.TagID] = struct{}{}
+			order = append(order, l.TagID)
+		}
+	}
+	var tags []model.Tag
+	h.db.Where("id IN ?", order).Find(&tags)
+	tagJSON := make(map[uint]gin.H, len(tags))
+	for i := range tags {
+		t := &tags[i]
+		tagJSON[t.ID] = gin.H{
+			"id": t.ID, "userId": t.UserID, "name": t.Name,
+			"color": t.Color, "createdAt": t.CreatedAt,
+		}
+	}
+	for _, l := range links {
+		if j, ok := tagJSON[l.TagID]; ok {
+			out[l.BookID] = append(out[l.BookID], j)
+		}
+	}
+	return out
 }
 
 // ListBooks 书籍列表（支持 status/domain/tag_id/keyword 过滤 + 分页，供前端滚动加载）。
@@ -77,9 +139,19 @@ func (h *Handler) ListBooks(c *gin.Context) {
 		serverError(c, "查询失败")
 		return
 	}
+	// 批量加载标签，避免逐本查询
+	bookIDs := make([]uint, 0, len(all))
+	for i := range all {
+		bookIDs = append(bookIDs, all[i].ID)
+	}
+	tagsMap := h.bookTagsByIDs(bookIDs)
 	items := make([]gin.H, 0, len(all))
 	for i := range all {
-		items = append(items, h.bookJSON(&all[i]))
+		tgs := tagsMap[all[i].ID]
+		if tgs == nil {
+			tgs = []gin.H{}
+		}
+		items = append(items, bookCardJSON(&all[i], tgs))
 	}
 	c.JSON(200, gin.H{"items": items, "total": total, "page": page, "limit": limit})
 }
