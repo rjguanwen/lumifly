@@ -72,6 +72,16 @@ onMounted(() => {
     modules: {
       toolbar: TOOLBAR,
       clipboard: { matchVisual: false },
+      // 覆盖 Quill 默认的 uploader.handler：默认实现用 FileReader.readAsDataURL 把
+      // 粘贴/拖放进来的图片直接内联成 base64 文本塞进正文（一张截图就是 1~3 MB 字符），
+      // 既拖慢编辑与渲染，又会被广场快照整段复制进 publications.content。
+      // 改成与工具栏「图片」按钮一致：先传服务器，正文里只留 URL。
+      // 何时触发仍完全由 Quill 自己判定（粘贴无 html 的图片 / 粘贴单个 img / 拖放）。
+      uploader: {
+        // 与后端 /api/upload 接受的图片类型对齐（默认为 png/jpeg，gif/webp 会被丢掉）
+        mimetypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
+        handler: (range, files) => { onPasteOrDropImages(range, files) },
+      },
     },
   })
   quill.on('text-change', () => emitHtml())
@@ -115,6 +125,36 @@ async function onPickImageFile(e) {
   } catch {
     ElMessage.error('图片上传失败')
   }
+}
+
+// 粘贴/拖放图片：走服务端上传后只插入 URL，不内联 base64。
+// 替换语义与 Quill 原实现一致：若粘贴时选区非空，先删除选中内容再插入。
+async function onPasteOrDropImages(range, files) {
+  if (!quill || !files?.length) return
+  const urls = []
+  let failed = 0
+  for (const file of files) {
+    try {
+      const result = await uploadApi.upload(file)
+      const url = result?.url || ''
+      if (url) urls.push(url)
+      else failed += 1
+    } catch {
+      failed += 1
+    }
+  }
+  if (!urls.length) {
+    ElMessage.error('图片上传失败')
+    return
+  }
+  if (range.length > 0) quill.deleteText(range.index, range.length, 'silent')
+  let at = range.index
+  for (const url of urls) {
+    quill.insertEmbed(at, 'image', url)
+    at += 1
+  }
+  quill.setSelection(at, 0)
+  if (failed) ElMessage.error(`${failed} 张图片上传失败`)
 }
 
 // 外部赋值（例如编辑回显）时同步到编辑器

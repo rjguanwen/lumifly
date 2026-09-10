@@ -223,19 +223,10 @@ function openDetail(p) {
   postDialogVisible.value = true
 }
 
-// 从快照正文提取图片，用于卡片缩略（最多前 3 张，带缓存）
-const imgCache = {}
-function extractContentImgs(html) {
-  if (!html) return []
-  const out = []
-  const re = /<img[^>]+src="([^"]+)"/g
-  let m
-  while ((m = re.exec(html)) && out.length < 3) out.push(m[1])
-  return out
-}
+// 卡片缩略图：列表接口直接给出正文里的图片 URL（最多前 3 张，由后端从快照提取），
+// 不再随列表下发整段正文——历史数据里含内联图片的正文单条就有数 MB。
 function postImgs(p) {
-  if (!(p.id in imgCache)) imgCache[p.id] = extractContentImgs(p.content)
-  return imgCache[p.id]
+  return p.contentImages || []
 }
 
 async function loadFriends() {
