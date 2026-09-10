@@ -55,7 +55,7 @@
               <div v-if="m.description" class="text-sm text-gray-700 prose prose-sm mt-1" v-html="m.description" />
               <div v-if="m.media?.length" class="mt-2 space-y-2">
                 <template v-for="med in m.media" :key="med.id">
-                  <img v-if="med.mimeType?.startsWith('image/')" :src="med.url" alt="" class="w-full rounded-lg object-cover max-h-60 cursor-pointer" @click.stop="openGallery(m.media, med.url)" />
+                  <img v-if="med.mimeType?.startsWith('image/')" :src="med.url" alt="" loading="lazy" class="w-full rounded-lg object-cover max-h-60 cursor-pointer" @click.stop="openGallery(m.media, med.url)" />
                   <video v-else-if="med.mimeType?.startsWith('video/')" :src="med.url" controls class="w-full rounded-lg max-h-60" />
                 </template>
               </div>
@@ -102,7 +102,7 @@
         <div v-if="detailRecord.content" class="prose max-w-none" v-html="detailRecord.content" />
         <div v-if="detailRecord.media?.length" class="grid grid-cols-2 gap-3">
           <template v-for="med in detailRecord.media" :key="med.id">
-            <img v-if="med.mimeType?.startsWith('image/')" :src="med.url" alt="" class="w-full rounded-xl object-cover aspect-square cursor-pointer" @click="openGallery(detailRecord.media, med.url)" />
+            <img v-if="med.mimeType?.startsWith('image/')" :src="med.url" alt="" loading="lazy" class="w-full rounded-xl object-cover aspect-square cursor-pointer" @click="openGallery(detailRecord.media, med.url)" />
             <video v-else-if="med.mimeType?.startsWith('video/')" :src="med.url" controls class="w-full rounded-xl max-h-56" />
           </template>
         </div>
@@ -132,6 +132,9 @@ import ImageLightbox from './ImageLightbox.vue'
 import CalendarCommentDialog from './CalendarCommentDialog.vue'
 import { sharedCalendarApi } from '../api'
 import { categoryLabel, moodEmoji } from '../utils/helpers'
+import {
+  buildWeekBounds, firstCellReachable, lastCellStartingBefore,
+} from '../utils/lifeCalendarCells'
 
 const props = defineProps({
   ownerId: { type: Number, required: true },
@@ -167,6 +170,8 @@ const tickAxisStyle = { display: 'grid', gridTemplateColumns: `repeat(${lifeYear
 
 const recordShades = ['bg-blue-200', 'bg-blue-300', 'bg-blue-400', 'bg-blue-500', 'bg-blue-600']
 
+// 性能：同 LifeCalendar，把每格重扫全部数据改为「边界预算一次 + 二分归格」，
+// 命中口径与颜色/文案优先级与改动前逐格一致（见 utils/lifeCalendarCells.js）。
 const metaGrid = computed(() => {
   const birth = dayjs(props.birthDate)
   const now = dayjs()
@@ -181,21 +186,46 @@ const metaGrid = computed(() => {
     const d = dayjs(m.event_date)
     if (d.isValid()) milestones.push({ d, item: m })
   }
+
+  const cellCount = lifeYears.value * 52
+  const bound = buildWeekBounds(birth, cellCount)
+  const birthRaw = birth.valueOf()
+  const nowRaw = now.valueOf()
+  const recTotals = new Float64Array(cellCount)
+  const hasMsFlags = new Uint8Array(cellCount)
+
+  if (birth.isValid()) {
+    for (const r of records) {
+      const lo = firstCellReachable(bound, r.d.startOf('day').valueOf())
+      const hi = lastCellStartingBefore(bound, r.d.endOf('day').valueOf())
+      for (let p = lo; p <= hi; p++) recTotals[p] += r.n
+    }
+    for (const m of milestones) {
+      const lo = firstCellReachable(bound, m.d.startOf('day').valueOf())
+      const hi = lastCellStartingBefore(bound, m.d.endOf('day').valueOf())
+      for (let p = lo; p <= hi; p++) hasMsFlags[p] = 1
+    }
+  } else {
+    // birthDate 非法时，原始的取反比较式会让每条数据都命中每一格，这里保持同样结果
+    let total = 0
+    for (const r of records) total += r.n
+    recTotals.fill(total)
+    if (milestones.length) hasMsFlags.fill(1)
+  }
+
   const rows = []
   for (let yi = 0; yi < lifeYears.value; yi++) {
     const row = []
     for (let wi = 0; wi < 52; wi++) {
-      const weekStart = birth.add(yi * 52 + wi, 'week')
-      const weekEnd = weekStart.add(6, 'day')
-      const inWeek = (d) => d.isValid() && !d.isBefore(weekStart, 'day') && !d.isAfter(weekEnd, 'day')
-      let recordCount = 0
-      let hasMilestone = false
-      if (!weekEnd.isBefore(birth, 'day')) {
-        for (const r of records) if (inWeek(r.d)) recordCount += r.n
-        for (const m of milestones) if (inWeek(m.d)) hasMilestone = true
-      }
-      const isPast = weekEnd.isBefore(now, 'day')
-      const born = !weekEnd.isBefore(birth, 'day')
+      const p = yi * 52 + wi
+      const recordCount = recTotals[p]
+      const hasMilestone = hasMsFlags[p] === 1
+
+      // 保持 !(a < b) 的取反形式，对应原来的 !weekEnd.isBefore(birth, 'day')
+      const born = !(bound.weEndDay[p] < birthRaw)
+      // 这一条原本就没有取反（weekEnd.isBefore(now, 'day')），所以直接用 <
+      const isPast = bound.weEndDay[p] < nowRaw
+
       let cls
       if (!born) cls = 'bg-transparent'
       else if (isPast) {
@@ -203,12 +233,13 @@ const metaGrid = computed(() => {
         else if (recordCount > 0) cls = recordShades[Math.min(recordCount, 5) - 1]
         else cls = 'bg-gray-200'
       } else cls = 'bg-gray-100'
-      const bits = [`出生第 ${yi + 1} 年 · 第 ${wi + 1} 周`, `${weekStart.format('YYYY-MM-DD')} ~ ${weekEnd.format('YYYY-MM-DD')}`]
+
+      const bits = [`出生第 ${yi + 1} 年 · 第 ${wi + 1} 周`, `${bound.startStr[p]} ~ ${bound.endStr[p]}`]
       if (recordCount > 0) bits.push(`日常记录 ${recordCount} 条`)
       if (hasMilestone) bits.push('有大事记')
       row.push({
         key: `${yi}-${wi}`, year: yi + 1, weekLabel: `第 ${wi + 1} 周`,
-        startDate: weekStart.format('YYYY-MM-DD'), endDate: weekEnd.format('YYYY-MM-DD'),
+        startDate: bound.startStr[p], endDate: bound.endStr[p],
         cls, title: bits.join('\n'),
       })
     }

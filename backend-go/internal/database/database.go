@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,35 @@ import (
 	"lumiflybackend/internal/config"
 	"lumiflybackend/internal/model"
 )
+
+// dsnWithPragmas 为库文件路径附加连接级 PRAGMA。
+// 底层驱动（github.com/glebarez/go-sqlite）在**每条新连接**建立时依次执行这些 pragma
+// （见其 applyQueryParams），因此即使放开连接池，设置也对每个连接生效。
+// 这一点是 db.Exec("PRAGMA ...") 做不到的——后者只作用于它借到的那一条连接。
+func dsnWithPragmas(path string) string {
+	// 顺序有意为之：先定日志模式，再调与该模式相关的项（synchronous、锁等待）。
+	pragmas := []string{
+		// WAL：允许「多读 + 单写」并发，读不再阻塞写、写不再阻塞读。
+		// 该设置持久化在库头内，这里显式声明以免依赖旧库遗留状态。
+		"journal_mode(WAL)",
+		// WAL 下的官方推荐档位：不再每次提交都 fsync，写延迟显著下降且不会因掉电损坏库。
+		"synchronous(NORMAL)",
+		// 与驱动默认值一致：遇到写锁竞争时等待而非立即返回 SQLITE_BUSY。
+		"busy_timeout(5000)",
+		// 外键约束（原先由 db.Exec 设置，现移到连接级以保证所有连接一致）。
+		"foreign_keys(1)",
+		// 负值表示 KiB：约 20MB 页缓存，减少同一请求内重复读盘的次数。
+		"cache_size(-20000)",
+	}
+	parts := make([]string, 0, len(pragmas))
+	for _, p := range pragmas {
+		parts = append(parts, "_pragma="+url.QueryEscape(p))
+	}
+	// 显式事务以 BEGIN IMMEDIATE 开启：直接拿写锁，避免「先读后写」在升级写锁时
+	// 拿到不会等待重试的 SQLITE_BUSY（WAL 下该场景 busy handler 不生效）。
+	parts = append(parts, "_txlock=immediate")
+	return path + "?" + strings.Join(parts, "&")
+}
 
 // execAddColumn 执行幂等 ALTER ADD COLUMN：列已存在（duplicate column）视为成功，避免噪音日志。
 func execAddColumn(sqlDB *sql.DB, query string) error {
@@ -52,7 +82,8 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 		}
 	}
 
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+	// 注意：DSN 只被驱动的 Open 解析（? 后的部分不会参与文件名），库文件路径本身不受影响。
+	db, err := gorm.Open(sqlite.Open(dsnWithPragmas(dbPath)), &gorm.Config{
 		Logger: logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
 			SlowThreshold:             200 * time.Millisecond,
 			LogLevel:                  logger.Warn,
@@ -68,11 +99,14 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get sql db: %w", err)
 	}
-	// SQLite 单文件：限制连接数避免写锁冲突
-	sqlDB.SetMaxOpenConns(1)
-
-	// 兼容旧库行为
-	db.Exec("PRAGMA foreign_keys = ON")
+	// 连接池：SQLite 在 WAL 模式下支持并发读，把池限制为 1 会让所有请求的全部 SQL（包括
+	// 同一请求内的多条查询）互相排队，成为吞吐的硬上限。这里放开为少量并发连接，
+	// 写冲突由上面的 WAL + busy_timeout 处理；_txlock(immediate) 则避免「先读后写」的
+	// 事务在升级写锁时直接拿到 SQLITE_BUSY（该场景下 busy handler 不会等待）。
+	sqlDB.SetMaxOpenConns(4)
+	sqlDB.SetMaxIdleConns(4)
+	// SQLite 连接无服务端超时，保持长连接复用，避免反复打开文件与重跑 pragma。
+	sqlDB.SetConnMaxLifetime(0)
 
 	return db, nil
 }

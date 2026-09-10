@@ -19,6 +19,20 @@ func (h *Handler) userProfileJSON(u model.User) gin.H {
 	}
 }
 
+// relationFrom 由一条已有的好友关系记录推导关系字符串（判定与 relationBetween 完全一致）。
+func relationFrom(meID uint, f *model.Friendship) string {
+	if f == nil {
+		return "none"
+	}
+	if f.Status == model.FriendAccepted {
+		return "friend"
+	}
+	if f.UserID == meID {
+		return "requested" // 我发起的待处理申请
+	}
+	return "requested_me" // 对方发给我的申请
+}
+
 // relationBetween 计算我与另一用户的当前关系：friend/requested/requested_me/none。
 func (h *Handler) relationBetween(meID, otherID uint) (string, *model.Friendship) {
 	var f model.Friendship
@@ -26,13 +40,40 @@ func (h *Handler) relationBetween(meID, otherID uint) (string, *model.Friendship
 		First(&f).Error; err != nil {
 		return "none", nil
 	}
-	if f.Status == model.FriendAccepted {
-		return "friend", &f
-	}
+	return relationFrom(meID, &f), &f
+}
+
+// otherFriendID 取一条好友关系记录中「对方」那一端的用户 id。
+func otherFriendID(meID uint, f model.Friendship) uint {
 	if f.UserID == meID {
-		return "requested", &f // 我发起的待处理申请
+		return f.FriendID
 	}
-	return "requested_me", &f // 对方发给我的申请
+	return f.UserID
+}
+
+// relationsBetween 一次算出我与多个用户的关系，语义与逐个调 relationBetween 完全一致。
+// 同一对用户可能存在两个方向的两条记录，原实现用 First（按主键升序取首条），
+// 这里同样按 id 升序取首次命中，保证取到的是同一条记录。
+func (h *Handler) relationsBetween(meID uint, otherIDs []uint) map[uint]model.Friendship {
+	out := make(map[uint]model.Friendship, len(otherIDs))
+	if len(otherIDs) == 0 {
+		return out
+	}
+	for _, part := range chunkIDs(otherIDs, idChunkSize) {
+		var rows []model.Friendship
+		h.db.Where("(user_id IN ? AND friend_id = ?) OR (user_id = ? AND friend_id IN ?)", part, meID, meID, part).
+			Order("id ASC").Find(&rows)
+		for _, f := range rows {
+			other := f.UserID
+			if other == meID {
+				other = f.FriendID
+			}
+			if _, ok := out[other]; !ok {
+				out[other] = f
+			}
+		}
+	}
+	return out
 }
 
 // SearchUsers 按昵称搜索用户（用于添加好友）。
@@ -51,12 +92,19 @@ func (h *Handler) SearchUsers(c *gin.Context) {
 		serverError(c, "查询失败")
 		return
 	}
+	// 原先每人一条关系查询（最多 20 条），现在合计一条
+	candidateIDs := make([]uint, 0, len(users))
 	for _, u := range users {
-		rel, f := h.relationBetween(cu.ID, u.ID)
+		candidateIDs = append(candidateIDs, u.ID)
+	}
+	rels := h.relationsBetween(cu.ID, candidateIDs)
+	for _, u := range users {
 		item := h.userProfileJSON(u)
-		item["relation"] = rel
-		if f != nil {
+		if f, ok := rels[u.ID]; ok {
+			item["relation"] = relationFrom(cu.ID, &f)
 			item["relationId"] = f.ID
+		} else {
+			item["relation"] = "none"
 		}
 		items = append(items, item)
 	}
@@ -121,10 +169,16 @@ func (h *Handler) ListFriendRequests(c *gin.Context) {
 
 	var received []model.Friendship
 	h.db.Where("friend_id = ? AND status = ?", cu.ID, model.FriendPending).Order("id DESC").Find(&received)
+	// 原先每条申请一次用户查询，收成一次批量；输出顺序仍按 received 行进
+	recvIDs := make([]uint, 0, len(received))
+	for _, f := range received {
+		recvIDs = append(recvIDs, f.UserID)
+	}
+	recvUsers := h.userProfilesByIDs(recvIDs)
 	receivedItems := make([]gin.H, 0, len(received))
 	for _, f := range received {
-		var u model.User
-		if err := h.db.First(&u, f.UserID).Error; err != nil {
+		u, ok := recvUsers[f.UserID]
+		if !ok {
 			continue
 		}
 		item := h.userProfileJSON(u)
@@ -135,10 +189,15 @@ func (h *Handler) ListFriendRequests(c *gin.Context) {
 
 	var sent []model.Friendship
 	h.db.Where("user_id = ? AND status = ?", cu.ID, model.FriendPending).Order("id DESC").Find(&sent)
+	sentIDs := make([]uint, 0, len(sent))
+	for _, f := range sent {
+		sentIDs = append(sentIDs, f.FriendID)
+	}
+	sentUsers := h.userProfilesByIDs(sentIDs)
 	sentItems := make([]gin.H, 0, len(sent))
 	for _, f := range sent {
-		var u model.User
-		if err := h.db.First(&u, f.FriendID).Error; err != nil {
+		u, ok := sentUsers[f.FriendID]
+		if !ok {
 			continue
 		}
 		item := h.userProfileJSON(u)
@@ -199,16 +258,16 @@ func (h *Handler) ListFriends(c *gin.Context) {
 	h.db.Where("status = ? AND (user_id = ? OR friend_id = ?)", model.FriendAccepted, cu.ID, cu.ID).
 		Order("updated_at DESC").Find(&rows)
 
-	friends := make([]gin.H, 0, len(rows))
+	friendIDs := make([]uint, 0, len(rows))
 	for _, f := range rows {
-		var otherID uint
-		if f.UserID == cu.ID {
-			otherID = f.FriendID
-		} else {
-			otherID = f.UserID
-		}
-		var u model.User
-		if err := h.db.First(&u, otherID).Error; err != nil {
+		friendIDs = append(friendIDs, otherFriendID(cu.ID, f))
+	}
+	userMap := h.userProfilesByIDs(friendIDs)
+
+	friends := make([]gin.H, 0, len(rows))
+	for i, f := range rows {
+		u, ok := userMap[friendIDs[i]]
+		if !ok {
 			continue
 		}
 		item := h.userProfileJSON(u)

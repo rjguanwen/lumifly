@@ -41,7 +41,7 @@
           <div v-if="idea.content" class="text-sm text-gray-600 prose prose-sm" v-html="idea.content" />
           <div v-if="idea.media?.length" class="flex gap-2 flex-wrap mt-2">
             <template v-for="m in idea.media" :key="m.id">
-              <img v-if="m.mimeType?.startsWith('image/')" :src="m.url" class="w-full rounded-lg object-cover max-h-48" />
+              <img v-if="m.mimeType?.startsWith('image/')" :src="m.url" loading="lazy" class="w-full rounded-lg object-cover max-h-48" />
               <video v-else-if="m.mimeType?.startsWith('video/')" :src="m.url" controls class="w-full rounded-lg max-h-48" @click.stop />
             </template>
           </div>

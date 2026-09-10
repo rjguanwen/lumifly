@@ -48,6 +48,7 @@
                 v-for="m in record.media.filter((x) => x.mimeType?.startsWith('image/'))"
                 :key="m.id"
                 :src="m.url"
+                loading="lazy"
                 class="w-16 h-16 object-cover rounded-lg"
               />
             </div>

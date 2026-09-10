@@ -14,8 +14,13 @@ func (h *Handler) milestoneDetail(milestoneID uint) gin.H {
 	if err := h.db.First(&ms, milestoneID).Error; err != nil {
 		return nil
 	}
+	return h.milestoneDetailOf(&ms)
+}
+
+// milestoneDetailOf 用已取到的大事记行组装详情，避免再查一次主行。
+func (h *Handler) milestoneDetailOf(ms *model.Milestone) gin.H {
 	var links []model.MilestoneTag
-	h.db.Where("milestone_id = ?", milestoneID).Find(&links)
+	h.db.Where("milestone_id = ?", ms.ID).Find(&links)
 	ids := make([]uint, 0, len(links))
 	for _, l := range links {
 		ids = append(ids, l.TagID)
@@ -58,9 +63,31 @@ func (h *Handler) ListMilestones(c *gin.Context) {
 		serverError(c, "查询失败")
 		return
 	}
+	// 标签/媒体批量加载：原先每条大事记 4 条 SQL 且无分页，现在固定 3 条。
+	ids := make([]uint, 0, len(all))
+	for i := range all {
+		ids = append(ids, all[i].ID)
+	}
+	tagMap := h.tagsByEntities("milestone_tags", "milestone_id", ids)
+	mediaMap := h.mediaByEntities("milestone", ids)
+
 	items := make([]gin.H, 0, len(all))
-	for _, m := range all {
-		items = append(items, h.milestoneDetail(m.ID))
+	for i := range all {
+		m := &all[i]
+		items = append(items, gin.H{
+			"id":          m.ID,
+			"userId":      m.UserID,
+			"title":       m.Title,
+			"description": m.Description,
+			"eventDate":   m.EventDate,
+			"endDate":     m.EndDate,
+			"category":    m.Category,
+			"importance":  m.Importance,
+			"createdAt":   m.CreatedAt,
+			"updatedAt":   m.UpdatedAt,
+			"tags":        tagMap[m.ID],
+			"media":       mediaMap[m.ID],
+		})
 	}
 	c.JSON(200, gin.H{"items": items, "total": len(items)})
 }
@@ -78,7 +105,7 @@ func (h *Handler) GetMilestone(c *gin.Context) {
 		notFound(c, "大事记不存在")
 		return
 	}
-	c.JSON(200, h.milestoneDetail(ms.ID))
+	c.JSON(200, h.milestoneDetailOf(&ms))
 }
 
 // CreateMilestone 新建大事记。
@@ -127,7 +154,7 @@ func (h *Handler) CreateMilestone(c *gin.Context) {
 		return
 	}
 	h.attachTagsAndMedia(cu.ID, "milestone", ms.ID, req.TagIDs, req.MediaIDs)
-	c.JSON(200, h.milestoneDetail(ms.ID))
+	c.JSON(200, h.milestoneDetailOf(&ms))
 }
 
 // UpdateMilestone 更新大事记。
@@ -181,18 +208,10 @@ func (h *Handler) UpdateMilestone(c *gin.Context) {
 		return
 	}
 	if req.TagIDs != nil {
-		h.db.Where("milestone_id = ?", id).Delete(&model.MilestoneTag{})
-		for _, tid := range *req.TagIDs {
-			h.db.Create(&model.MilestoneTag{MilestoneID: uint(id), TagID: tid})
-		}
+		h.replaceTagLinks("milestone", uint(id), *req.TagIDs)
 	}
 	if req.MediaIDs != nil {
-		h.db.Model(&model.Media{}).Where("user_id = ? AND entity_type = 'milestone' AND entity_id = ?", cu.ID, id).
-			Updates(map[string]interface{}{"entity_type": nil, "entity_id": nil})
-		for _, mid := range *req.MediaIDs {
-			h.db.Model(&model.Media{}).Where("id = ? AND user_id = ?", mid, cu.ID).
-				Updates(map[string]interface{}{"entity_type": "milestone", "entity_id": id})
-		}
+		h.remountMediaOnUpdate(cu.ID, "milestone", uint(id), *req.MediaIDs)
 	}
 	c.JSON(200, h.milestoneDetail(uint(id)))
 }

@@ -31,9 +31,16 @@ func (h *Handler) CalendarSummary(c *gin.Context) {
 	// 大事记（含媒体，用于日历时段详情）
 	var milestones []model.Milestone
 	h.db.Where("user_id = ?", cu.ID).Find(&milestones)
+	// 这里只需要 media：改为一次批量取回，原先逐条调 milestoneDetail
+	// 会为每条大事记多打 4 条 SQL（含重复的主行与标签查询）。
+	msIDs := make([]uint, 0, len(milestones))
+	for i := range milestones {
+		msIDs = append(msIDs, milestones[i].ID)
+	}
+	mediaMap := h.mediaByEntities("milestone", msIDs)
 	milestoneItems := make([]gin.H, 0, len(milestones))
-	for _, m := range milestones {
-		msJSON := h.milestoneDetail(m.ID)
+	for i := range milestones {
+		m := &milestones[i]
 		milestoneItems = append(milestoneItems, gin.H{
 			"id":          m.ID,
 			"title":       m.Title,
@@ -41,7 +48,7 @@ func (h *Handler) CalendarSummary(c *gin.Context) {
 			"category":    m.Category,
 			"eventDate":   m.EventDate,
 			"importance":  m.Importance,
-			"media":       msJSON["media"],
+			"media":       mediaMap[m.ID],
 		})
 	}
 

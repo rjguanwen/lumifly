@@ -72,7 +72,7 @@
             <div v-if="m.description" class="text-sm text-gray-700 prose prose-sm mt-1" v-html="m.description" />
             <div v-if="m.media?.length" class="mt-2 space-y-2">
               <template v-for="med in m.media" :key="med.id">
-                <img v-if="med.mimeType?.startsWith('image/')" :src="med.url" :alt="med.fileName" class="w-full rounded-lg object-cover max-h-60 cursor-pointer hover:opacity-90 transition-opacity" @click.stop="openGallery(m.media, med.url)" />
+                <img v-if="med.mimeType?.startsWith('image/')" :src="med.url" :alt="med.fileName" loading="lazy" class="w-full rounded-lg object-cover max-h-60 cursor-pointer hover:opacity-90 transition-opacity" @click.stop="openGallery(m.media, med.url)" />
                 <video v-else-if="med.mimeType?.startsWith('video/')" :src="med.url" controls class="w-full rounded-lg max-h-60" />
               </template>
             </div>
@@ -131,6 +131,7 @@
               v-if="med.mimeType?.startsWith('image/')"
               :src="med.url"
               :alt="med.fileName"
+              loading="lazy"
               class="w-full rounded-xl object-cover aspect-square cursor-pointer hover:opacity-90 transition-opacity"
               @click="openGallery(detailRecord.media, med.url)"
             />
@@ -264,6 +265,9 @@ import CalendarCommentDialog from './CalendarCommentDialog.vue'
 import { recordApi, milestoneApi } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { categoryLabel, milestoneCategories, moodEmoji } from '../utils/helpers'
+import {
+  buildWeekBounds, firstCellReachable, lastCellStartingBefore,
+} from '../utils/lifeCalendarCells'
 
 const auth = useAuthStore()
 
@@ -343,33 +347,59 @@ function parseSummary() {
 }
 
 // ---------- 生成带标注的网格 ----------
+// 性能：每格的起止边界只算一次，数据用二分归入命中的格子，不再每格重扫全部
+// 记录/大事记（原为 O(格数 × 数据量)）。命中口径、颜色优先级、提示文案与
+// 改动前逐格完全一致，详见 utils/lifeCalendarCells.js 顶部说明。
 const metaGrid = computed(() => {
   const birth = dayjs(props.birthDate)
   const now = dayjs()
   const lifespan = Math.max(1, Math.min(120, props.lifespan || 80))
   const { records, milestones } = parseSummary()
 
+  const cellCount = lifespan * 52
+  const bound = buildWeekBounds(birth, cellCount)
+  const birthRaw = birth.valueOf()
+  const nowRaw = now.valueOf()
+  const recTotals = new Float64Array(cellCount)
+  const msLists = new Array(cellCount) // 缺省（undefined）表示该格无大事记
+
+  if (birth.isValid()) {
+    // 记录条数按原顺序累加，大事记按原数组顺序入格，两者结果与逐格重扫相同
+    for (const r of records) {
+      const lo = firstCellReachable(bound, r.d.startOf('day').valueOf())
+      const hi = lastCellStartingBefore(bound, r.d.endOf('day').valueOf())
+      for (let p = lo; p <= hi; p++) recTotals[p] += r.n
+    }
+    for (const m of milestones) {
+      const lo = firstCellReachable(bound, m.d.startOf('day').valueOf())
+      const hi = lastCellStartingBefore(bound, m.d.endOf('day').valueOf())
+      for (let p = lo; p <= hi; p++) {
+        if (!msLists[p]) msLists[p] = []
+        msLists[p].push(m.item)
+      }
+    }
+  } else {
+    // birthDate 非法时，原始的取反比较式会让每条数据都命中每一格，这里保持同样结果
+    let total = 0
+    for (const r of records) total += r.n
+    recTotals.fill(total)
+    const allMs = milestones.map((m) => m.item)
+    for (let p = 0; p < cellCount; p++) msLists[p] = allMs
+  }
+
   const rows = []
   for (let yi = 0; yi < lifespan; yi++) {
     const row = []
     for (let wi = 0; wi < 52; wi++) {
-      const weekStart = birth.add(yi * 52 + wi, 'week')
-      const weekEnd = weekStart.add(6, 'day')
-      const start = weekStart.format('YYYY-MM-DD')
-      const end = weekEnd.format('YYYY-MM-DD')
+      const p = yi * 52 + wi
+      const recordCount = recTotals[p]
+      const cellMilestones = msLists[p] || []
 
-      const inWeek = (d) => d && d.isValid() && !d.isBefore(weekStart, 'day') && !d.isAfter(weekEnd, 'day')
-
-      let recordCount = 0
-      const cellMilestones = []
-      if (!weekEnd.isBefore(birth, 'day')) {
-        for (const r of records) if (inWeek(r.d)) recordCount += r.n
-        for (const m of milestones) if (inWeek(m.d)) cellMilestones.push(m.item)
-      }
-
-      const isCurrent = !weekStart.isAfter(now, 'day') && !weekEnd.isBefore(now, 'day')
-      const isPast = !isCurrent && weekEnd.isBefore(now, 'day')
-      const born = !weekEnd.isBefore(birth, 'day')
+      // 下面三个判定保持 !(a < b) 的取反形式，对应原来的
+      // !weekEnd.isBefore(birth) / !weekStart.isAfter(now) && !weekEnd.isBefore(now)
+      const isCurrent = !(nowRaw < bound.wsStartDay[p]) && !(bound.weEndDay[p] < nowRaw)
+      const isPast = !isCurrent && bound.weEndDay[p] < nowRaw
+      const born = !(bound.weEndDay[p] < birthRaw)
 
       let cls
       if (!born) cls = [emptyCls]
@@ -382,7 +412,7 @@ const metaGrid = computed(() => {
         cls = [futureCls]
       }
 
-      const bits = [`出生第 ${yi + 1} 年 · 第 ${wi + 1} 周`, `${start} ~ ${end}`]
+      const bits = [`出生第 ${yi + 1} 年 · 第 ${wi + 1} 周`, `${bound.startStr[p]} ~ ${bound.endStr[p]}`]
       if (recordCount > 0) bits.push(`日常记录 ${recordCount} 条`)
       if (cellMilestones.length) bits.push(`大事记 ${cellMilestones.length} 件`)
 
@@ -392,8 +422,8 @@ const metaGrid = computed(() => {
         wi,
         year: yi + 1,
         weekLabel: `第 ${wi + 1} 周`,
-        startDate: start,
-        endDate: end,
+        startDate: bound.startStr[p],
+        endDate: bound.endStr[p],
         cls,
         title: bits.join('\n'),
         data: { milestones: cellMilestones, recordCount },

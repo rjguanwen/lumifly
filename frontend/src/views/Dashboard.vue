@@ -216,13 +216,15 @@ const quickActions = [
 
 async function load() {
   if (!auth.user?.birthDate) return
-  try {
-    summaryData.value = await calendarApi.summary()
-  } catch { /* 忽略 */ }
-  try {
-    const data = await recordApi.list({ limit: 4 })
-    recentRecords.value = data.items || []
-  } catch { /* 忽略 */ }
+  // 两个请求互不依赖，改为并发发出，把首屏串行的两次 RTT 压成一次。
+  // 用 allSettled 而非 all：保持原来「各自 try/catch，任一失败仅跳过它自己的赋值、
+  // 不影响另一个」的语义（成功/失败的可观测结果与改动前完全一致）。
+  const [sumRes, recRes] = await Promise.allSettled([
+    calendarApi.summary(),
+    recordApi.list({ limit: 4 }),
+  ])
+  if (sumRes.status === 'fulfilled') summaryData.value = sumRes.value
+  if (recRes.status === 'fulfilled') recentRecords.value = recRes.value.items || []
 }
 
 function goRecord(record) {

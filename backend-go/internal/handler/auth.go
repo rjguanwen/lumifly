@@ -16,6 +16,14 @@ import (
 // 发送找回邮件的最小间隔（防止刷接口）
 var forgotSendLocks sync.Map
 
+// emailRe 邮箱格式校验。提到包级避免每次请求都重新编译正则。
+var emailRe = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+
+// htmlEscaper 邮件正文转义。strings.NewReplacer 可并发使用且构造开销较大，只建一次。
+var htmlEscaper = strings.NewReplacer(
+	"&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;",
+)
+
 // userJSON 输出用户（不含密码）。
 func userJSON(u *model.User) gin.H {
 	return gin.H{
@@ -106,7 +114,6 @@ func (h *Handler) Register(c *gin.Context) {
 		badRequest(c, "密码至少需要 8 个字符")
 		return
 	}
-	emailRe := regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 	if !emailRe.MatchString(req.Email) {
 		badRequest(c, "邮箱格式不正确")
 		return
@@ -508,6 +515,5 @@ func buildResetMailHTML(displayName, resetURL string) string {
 }
 
 func escapeHTML(s string) string {
-	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
-	return r.Replace(s)
+	return htmlEscaper.Replace(s)
 }

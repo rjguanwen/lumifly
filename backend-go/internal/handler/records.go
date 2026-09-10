@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"lumiflybackend/internal/model"
 )
@@ -37,10 +38,7 @@ func (h *Handler) tagsByIDs(ids []uint) []gin.H {
 	var tags []model.Tag
 	h.db.Where("id IN ?", ids).Find(&tags)
 	for _, t := range tags {
-		res = append(res, gin.H{
-			"id": t.ID, "userId": t.UserID, "name": t.Name,
-			"color": t.Color, "createdAt": t.CreatedAt,
-		})
+		res = append(res, tagJSONRow(&t))
 	}
 	return res
 }
@@ -58,8 +56,13 @@ func (h *Handler) recordDetail(recordID uint) gin.H {
 	if err := h.db.First(&rec, recordID).Error; err != nil {
 		return nil
 	}
+	return h.recordDetailOf(&rec)
+}
+
+// recordDetailOf 用已取到的记录行组装详情，避免再查一次主行。
+func (h *Handler) recordDetailOf(rec *model.Record) gin.H {
 	var links []model.RecordTag
-	h.db.Where("record_id = ?", recordID).Find(&links)
+	h.db.Where("record_id = ?", rec.ID).Find(&links)
 	ids := make([]uint, 0, len(links))
 	for _, l := range links {
 		ids = append(ids, l.TagID)
@@ -117,9 +120,31 @@ func (h *Handler) ListRecords(c *gin.Context) {
 		return
 	}
 
+	// 标签与媒体改为批量加载：原先每行 4~5 条 SQL（limit=100 时单请求近 500 条），
+	// 现在固定 3 条，输出与逐行版本完全一致。
+	ids := make([]uint, 0, len(paged))
+	for i := range paged {
+		ids = append(ids, paged[i].ID)
+	}
+	tagMap := h.tagsByEntities("record_tags", "record_id", ids)
+	mediaMap := h.mediaByEntities("record", ids)
+
 	items := make([]gin.H, 0, len(paged))
-	for _, r := range paged {
-		items = append(items, h.recordDetail(r.ID))
+	for i := range paged {
+		r := &paged[i]
+		items = append(items, gin.H{
+			"id":         r.ID,
+			"userId":     r.UserID,
+			"title":      r.Title,
+			"content":    r.Content,
+			"recordDate": r.RecordDate,
+			"mood":       r.Mood,
+			"weather":    r.Weather,
+			"createdAt":  r.CreatedAt,
+			"updatedAt":  r.UpdatedAt,
+			"tags":       tagMap[r.ID],
+			"media":      mediaMap[r.ID],
+		})
 	}
 	c.JSON(200, gin.H{"items": items, "total": total, "page": page, "limit": limit})
 }
@@ -137,7 +162,8 @@ func (h *Handler) GetRecord(c *gin.Context) {
 		notFound(c, "记录不存在")
 		return
 	}
-	c.JSON(200, h.recordDetail(rec.ID))
+	// 直接用已取到的行组装，避开 recordDetail 内重复的主行查询
+	c.JSON(200, h.recordDetailOf(&rec))
 }
 
 // CreateRecord 新建记录。
@@ -176,25 +202,27 @@ func (h *Handler) CreateRecord(c *gin.Context) {
 		return
 	}
 	h.attachTagsAndMedia(cu.ID, "record", rec.ID, req.TagIDs, req.MediaIDs)
-	c.JSON(200, h.recordDetail(rec.ID))
+	c.JSON(200, h.recordDetailOf(&rec))
 }
 
 // attachTagsAndMedia 写入标签关联与媒体关联（事务内），供各资源复用。
+// 写入方式改为单事务 + 批量语句：原先逐条 Create/Update 每个都是一次独立写事务（各一次 fsync）。
+// 只改写法，落库结果与逐条版本一致（错误同样不中断后续语句）。
 func (h *Handler) attachTagsAndMedia(userID uint, entityType string, entityID uint, tagIDs, mediaIDs []uint) {
-	for _, tid := range tagIDs {
-		switch entityType {
-		case "record":
-			h.db.Create(&model.RecordTag{RecordID: entityID, TagID: tid})
-		case "milestone":
-			h.db.Create(&model.MilestoneTag{MilestoneID: entityID, TagID: tid})
-		case "idea":
-			h.db.Create(&model.IdeaTag{IdeaID: entityID, TagID: tid})
+	table, column, ok := tagLinkTable(entityType)
+	if !ok && len(mediaIDs) == 0 {
+		return
+	}
+	h.db.Transaction(func(tx *gorm.DB) error {
+		if ok {
+			insertTagLinks(tx, table, column, entityID, tagIDs)
 		}
-	}
-	for _, mid := range mediaIDs {
-		h.db.Model(&model.Media{}).Where("id = ? AND user_id = ?", mid, userID).
-			Updates(map[string]interface{}{"entity_type": entityType, "entity_id": entityID})
-	}
+		if len(mediaIDs) > 0 {
+			tx.Model(&model.Media{}).Where("id IN ? AND user_id = ?", mediaIDs, userID).
+				Updates(map[string]interface{}{"entity_type": entityType, "entity_id": entityID})
+		}
+		return nil
+	})
 }
 
 // UpdateRecord 更新记录。
@@ -244,19 +272,11 @@ func (h *Handler) UpdateRecord(c *gin.Context) {
 		return
 	}
 	if req.TagIDs != nil {
-		h.db.Where("record_id = ?", id).Delete(&model.RecordTag{})
-		for _, tid := range *req.TagIDs {
-			h.db.Create(&model.RecordTag{RecordID: uint(id), TagID: tid})
-		}
+		h.replaceTagLinks("record", uint(id), *req.TagIDs)
 	}
 	if req.MediaIDs != nil {
 		// 先解除旧媒体关联，再挂载新关联
-		h.db.Model(&model.Media{}).Where("user_id = ? AND entity_type = 'record' AND entity_id = ?", cu.ID, id).
-			Updates(map[string]interface{}{"entity_type": nil, "entity_id": nil})
-		for _, mid := range *req.MediaIDs {
-			h.db.Model(&model.Media{}).Where("id = ? AND user_id = ?", mid, cu.ID).
-				Updates(map[string]interface{}{"entity_type": "record", "entity_id": id})
-		}
+		h.remountMediaOnUpdate(cu.ID, "record", uint(id), *req.MediaIDs)
 	}
 	c.JSON(200, h.recordDetail(uint(id)))
 }

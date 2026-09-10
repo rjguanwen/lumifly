@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -165,41 +164,57 @@ func contentWithMedia(html string, media []gin.H) string {
 
 // pubItemJSON 组装单个帖子（含作者名/统计/是否已赞）。
 func (h *Handler) pubItemJSON(p *model.Publication, cuID uint) gin.H {
-	var authorName, authorAvatar, authorSignature string
+	brief := userBrief{}
 	if p.UserID > 0 {
-		var u model.User
-		if err := h.db.Select("display_name, avatar_url, signature").First(&u, p.UserID).Error; err == nil {
-			authorName = u.DisplayName
-			authorSignature = u.Signature
-			if u.AvatarURL != nil {
-				authorAvatar = *u.AvatarURL
-			}
-		}
+		brief = h.usersBriefByIDs([]uint{p.UserID})[p.UserID]
 	}
-	var likeCount, commentCount int64
-	h.db.Model(&model.PublicationLike{}).Where("publication_id = ?", p.ID).Count(&likeCount)
-	h.db.Model(&model.PublicationComment{}).Where("publication_id = ?", p.ID).Count(&commentCount)
+	stat := h.pubStatsByIDs([]uint{p.ID}, cuID)[p.ID]
+	return pubItemWith(p, brief, stat)
+}
 
+// pubItemWith 用已预取的作者信息与统计数据组装帖子，不产生额外 SQL。
+// 输出字段与逐行版本逐项对应。
+func pubItemWith(p *model.Publication, brief userBrief, stat pubStat) gin.H {
 	meta := map[string]string{}
 	if p.Meta != "" && p.Meta != "{}" {
 		_ = json.Unmarshal([]byte(p.Meta), &meta)
 	}
-	liked := false
-	if cuID > 0 {
-		var cnt int64
-		h.db.Model(&model.PublicationLike{}).Where("publication_id = ? AND user_id = ?", p.ID, cuID).Count(&cnt)
-		liked = cnt > 0
-	}
 	return gin.H{
-		"id": p.ID, "userId": p.UserID, "authorName": authorName,
-		"authorAvatar": authorAvatar, "authorSignature": authorSignature,
+		"id": p.ID, "userId": p.UserID, "authorName": brief.DisplayName,
+		"authorAvatar": brief.AvatarURL, "authorSignature": brief.Signature,
 		"sourceType": p.SourceType, "sourceId": p.SourceID,
 		"title": p.Title, "preview": p.Preview, "content": p.Content,
 		"author": p.Author, "rating": p.Rating, "meta": meta,
 		"status": p.Status, "reviewCategories": p.ReviewCategories,
 		"createdAt": p.CreatedAt, "updatedAt": p.UpdatedAt,
-		"likeCount": likeCount, "commentCount": commentCount, "liked": liked,
+		"likeCount": stat.LikeCount, "commentCount": stat.CommentCount, "liked": stat.Liked,
 	}
+}
+
+// pubItemsJSON 批量组装帖子列表：作者/点赞数/评论数/已赞状态改为集合查询，
+// 原先每个帖子 4 条 SQL（整页 20 条即 80 条），现在合计 4 条。
+func (h *Handler) pubItemsJSON(pubs []model.Publication, cuID uint) []gin.H {
+	ids := make([]uint, 0, len(pubs))
+	userIDs := make([]uint, 0, len(pubs))
+	seenUser := make(map[uint]struct{}, len(pubs))
+	for i := range pubs {
+		ids = append(ids, pubs[i].ID)
+		if pubs[i].UserID > 0 {
+			if _, ok := seenUser[pubs[i].UserID]; !ok {
+				seenUser[pubs[i].UserID] = struct{}{}
+				userIDs = append(userIDs, pubs[i].UserID)
+			}
+		}
+	}
+	briefs := h.usersBriefByIDs(userIDs)
+	stats := h.pubStatsByIDs(ids, cuID)
+
+	items := make([]gin.H, 0, len(pubs))
+	for i := range pubs {
+		p := &pubs[i]
+		items = append(items, pubItemWith(p, briefs[p.UserID], stats[p.ID]))
+	}
+	return items
 }
 
 // ---------- 接口 ----------
@@ -288,10 +303,7 @@ func (h *Handler) Mine(c *gin.Context) {
 		serverError(c, "查询失败")
 		return
 	}
-	items := make([]gin.H, 0, len(pubs))
-	for i := range pubs {
-		items = append(items, h.pubItemJSON(&pubs[i], cu.ID))
-	}
+	items := h.pubItemsJSON(pubs, cu.ID)
 	c.JSON(200, gin.H{"items": items, "total": len(items)})
 }
 
@@ -332,8 +344,14 @@ func (h *Handler) ListSquare(c *gin.Context) {
 
 	var pubs []model.Publication
 	if sortBy == "hot" {
-		// 最热：需全量点赞数排序，保持原有逻辑
-		if err := base.Find(&pubs).Error; err != nil {
+		// 最热：排序下推到 SQL。原先先把全部命中行（含正文大字段）读进内存、逐行数点赞、
+		// 再在 Go 里排序后切片，行数增长时内存与耗时都线性上升。
+		// 语义与原实现一致：点赞数降序，同数时按 id 升序（原全表扫描返回的即是该顺序），
+		// 并且仍然只多做一个 COUNT 子查询——publication_likes 的
+		// (publication_id, user_id) 唯一索引可直接完成该计数。
+		if err := base.
+			Order("(SELECT COUNT(*) FROM publication_likes pl WHERE pl.publication_id = publications.id) DESC, id ASC").
+			Limit(limit).Offset((page - 1) * limit).Find(&pubs).Error; err != nil {
 			serverError(c, "查询失败")
 			return
 		}
@@ -347,27 +365,10 @@ func (h *Handler) ListSquare(c *gin.Context) {
 
 	// 组装（含统计与点赞态），并标注相对用户已读水位的“新”内容
 	wm := h.squareReadWatermark(cu.ID)
-	items := make([]gin.H, 0, len(pubs))
+	items := h.pubItemsJSON(pubs, cu.ID)
 	for i := range pubs {
-		item := h.pubItemJSON(&pubs[i], cu.ID)
-		item["isNew"] = pubs[i].Status == model.PubStatusPublished &&
+		items[i]["isNew"] = pubs[i].Status == model.PubStatusPublished &&
 			pubs[i].UserID != cu.ID && pubs[i].UpdatedAt > wm
-		items = append(items, item)
-	}
-	if sortBy == "hot" {
-		sort.SliceStable(items, func(i, j int) bool {
-			return items[i]["likeCount"].(int64) > items[j]["likeCount"].(int64)
-		})
-		// 分页
-		start := (page - 1) * limit
-		end := start + limit
-		if start > len(items) {
-			start = len(items)
-		}
-		if end > len(items) {
-			end = len(items)
-		}
-		items = items[start:end]
 	}
 
 	c.JSON(200, gin.H{"items": items, "total": total, "page": page, "limit": limit})

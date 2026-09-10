@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 
@@ -44,22 +45,80 @@ func (h *Handler) moderationCustomTerms() map[string][]string {
 	return custom
 }
 
+// ---------- 词库缓存 ----------
+//
+// 原先每次发布都要重建合并 map、读一次 system_settings、再逐词 strings.Contains。
+// 内置词固定不变，自定义词仅在管理员保存时变化（本应用为单进程），
+// 因此缓存装配好的列表，并在 SaveModerationTerms 后主动失效。
+// 命中判定与输出顺序保持与原逐次装配一致（输出顺序由下方固定 cats 序列决定，与遍历序无关）。
+
+type moderationTerm struct {
+	cat  string
+	term string
+}
+
+var (
+	moderationMu     sync.RWMutex
+	moderationCached []moderationTerm
+)
+
+// buildModerationTerms 展平内置 + 自定义词库，去除空项与首尾空白。
+func buildModerationTerms(custom map[string][]string) []moderationTerm {
+	out := make([]moderationTerm, 0, 64)
+	for _, cat := range []string{ModCatTerror, ModCatViolence, ModCatPorn, ModCatPolitics} {
+		for _, t := range builtinModerationTerms[cat] {
+			if t = strings.TrimSpace(t); t != "" {
+				out = append(out, moderationTerm{cat: cat, term: t})
+			}
+		}
+		for _, t := range custom[cat] {
+			if t = strings.TrimSpace(t); t != "" {
+				out = append(out, moderationTerm{cat: cat, term: t})
+			}
+		}
+	}
+	// 原逻辑会遍历 merged 的所有类别，包括不在上面固定序列中的自定义分类名
+	for cat, terms := range custom {
+		if cat == ModCatTerror || cat == ModCatViolence || cat == ModCatPorn || cat == ModCatPolitics {
+			continue
+		}
+		for _, t := range terms {
+			if t = strings.TrimSpace(t); t != "" {
+				out = append(out, moderationTerm{cat: cat, term: t})
+			}
+		}
+	}
+	return out
+}
+
+// moderationTerms 取缓存的词库（首次或失效后重装）。
+func (h *Handler) moderationTerms() []moderationTerm {
+	moderationMu.RLock()
+	cached := moderationCached
+	moderationMu.RUnlock()
+	if cached != nil {
+		return cached
+	}
+	built := buildModerationTerms(h.moderationCustomTerms())
+	moderationMu.Lock()
+	moderationCached = built
+	moderationMu.Unlock()
+	return built
+}
+
+// invalidateModerationTerms 词库变更后调用，使下次审查重新装配。
+func invalidateModerationTerms() {
+	moderationMu.Lock()
+	moderationCached = nil
+	moderationMu.Unlock()
+}
+
 // moderateText 对文本做敏感词审查，返回是否拦截与命中分类。
 func (h *Handler) moderateText(text string) (bool, []string) {
 	hit := map[string]bool{}
-	merged := map[string][]string{}
-	for cat, terms := range builtinModerationTerms {
-		merged[cat] = append([]string{}, terms...)
-	}
-	for cat, terms := range h.moderationCustomTerms() {
-		merged[cat] = append(merged[cat], terms...)
-	}
-	for cat, terms := range merged {
-		for _, t := range terms {
-			t = strings.TrimSpace(t)
-			if t != "" && strings.Contains(text, t) {
-				hit[cat] = true
-			}
+	for _, t := range h.moderationTerms() {
+		if strings.Contains(text, t.term) {
+			hit[t.cat] = true
 		}
 	}
 	if len(hit) == 0 {
@@ -82,10 +141,7 @@ func (h *Handler) GetModerationQueue(c *gin.Context) {
 		serverError(c, "查询失败")
 		return
 	}
-	items := make([]gin.H, 0, len(pubs))
-	for i := range pubs {
-		items = append(items, h.pubItemJSON(&pubs[i], cu.ID))
-	}
+	items := h.pubItemsJSON(pubs, cu.ID)
 	c.JSON(200, gin.H{"items": items, "total": len(items)})
 }
 
@@ -165,5 +221,7 @@ func (h *Handler) SaveModerationTerms(c *gin.Context) {
 		serverError(c, "保存失败")
 		return
 	}
+	// 词库已变，使缓存失效（下次审查重新装配）
+	invalidateModerationTerms()
 	c.JSON(200, gin.H{"custom": req.Custom})
 }

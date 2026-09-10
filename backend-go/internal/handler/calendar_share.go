@@ -223,12 +223,17 @@ func (h *Handler) ListCalendarComments(c *gin.Context) {
 	var cms []model.CalendarComment
 	h.db.Where("owner_user_id = ? AND target_type = ? AND target_id = ?", ownerID, targetType, targetID).
 		Order("id ASC").Find(&cms)
+	// 原先每条评论一次用户查询，收成一次批量；输出顺序仍按 cms 行进
+	authorIDs := make([]uint, 0, len(cms))
+	for _, cm := range cms {
+		authorIDs = append(authorIDs, cm.AuthorUserID)
+	}
+	authorMap := h.userProfilesByIDs(authorIDs)
 	items := make([]gin.H, 0, len(cms))
 	for _, cm := range cms {
-		var u model.User
 		authorName := ""
 		var avatar interface{}
-		if err := h.db.First(&u, cm.AuthorUserID).Error; err == nil {
+		if u, ok := authorMap[cm.AuthorUserID]; ok {
 			authorName = u.DisplayName
 			avatar = u.AvatarURL
 		}

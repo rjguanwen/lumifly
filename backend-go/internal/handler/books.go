@@ -219,9 +219,7 @@ func (h *Handler) CreateBook(c *gin.Context) {
 		serverError(c, "保存失败")
 		return
 	}
-	for _, tid := range req.TagIDs {
-		h.db.Create(&model.BookTag{BookID: b.ID, TagID: tid})
-	}
+	h.createTagLinks("book", b.ID, req.TagIDs)
 	c.JSON(200, h.bookJSON(&b))
 }
 
@@ -294,10 +292,7 @@ func (h *Handler) UpdateBook(c *gin.Context) {
 		}
 	}
 	if req.TagIDs != nil {
-		h.db.Where("book_id = ?", id).Delete(&model.BookTag{})
-		for _, tid := range *req.TagIDs {
-			h.db.Create(&model.BookTag{BookID: uint(id), TagID: tid})
-		}
+		h.replaceTagLinks("book", uint(id), *req.TagIDs)
 	}
 	h.db.First(&b, id)
 	c.JSON(200, h.bookJSON(&b))

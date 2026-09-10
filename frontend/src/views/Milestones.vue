@@ -42,6 +42,7 @@
                   v-for="m in milestone.media.filter((x) => x.mimeType?.startsWith('image/'))"
                   :key="m.id"
                   :src="m.url"
+                  loading="lazy"
                   class="w-20 h-20 object-cover rounded-lg"
                 />
               </div>

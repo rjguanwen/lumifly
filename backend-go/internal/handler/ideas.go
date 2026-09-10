@@ -14,8 +14,13 @@ func (h *Handler) ideaDetail(ideaID uint) gin.H {
 	if err := h.db.First(&id, ideaID).Error; err != nil {
 		return nil
 	}
+	return h.ideaDetailOf(&id)
+}
+
+// ideaDetailOf 用已取到的灵感行组装详情，避免再查一次主行。
+func (h *Handler) ideaDetailOf(id *model.Idea) gin.H {
 	var links []model.IdeaTag
-	h.db.Where("idea_id = ?", ideaID).Find(&links)
+	h.db.Where("idea_id = ?", id.ID).Find(&links)
 	ids := make([]uint, 0, len(links))
 	for _, l := range links {
 		ids = append(ids, l.TagID)
@@ -58,9 +63,29 @@ func (h *Handler) ListIdeas(c *gin.Context) {
 		serverError(c, "查询失败")
 		return
 	}
+	// 标签/媒体批量加载：原先每条灵感 4 条 SQL，现在固定 3 条。
+	ids := make([]uint, 0, len(all))
+	for i := range all {
+		ids = append(ids, all[i].ID)
+	}
+	tagMap := h.tagsByEntities("idea_tags", "idea_id", ids)
+	mediaMap := h.mediaByEntities("idea", ids)
+
 	items := make([]gin.H, 0, len(all))
-	for _, i := range all {
-		items = append(items, h.ideaDetail(i.ID))
+	for i := range all {
+		it := &all[i]
+		items = append(items, gin.H{
+			"id":                it.ID,
+			"userId":            it.UserID,
+			"title":             it.Title,
+			"content":           it.Content,
+			"linkedPlanId":      it.LinkedPlanID,
+			"linkedMilestoneId": it.LinkedMilestoneID,
+			"createdAt":         it.CreatedAt,
+			"updatedAt":         it.UpdatedAt,
+			"tags":              tagMap[it.ID],
+			"media":             mediaMap[it.ID],
+		})
 	}
 	c.JSON(200, gin.H{"items": items, "total": total, "page": page, "limit": limit})
 }
@@ -78,7 +103,7 @@ func (h *Handler) GetIdea(c *gin.Context) {
 		notFound(c, "灵感不存在")
 		return
 	}
-	c.JSON(200, h.ideaDetail(idea.ID))
+	c.JSON(200, h.ideaDetailOf(&idea))
 }
 
 // CreateIdea 新建灵感。
@@ -114,7 +139,7 @@ func (h *Handler) CreateIdea(c *gin.Context) {
 		return
 	}
 	h.attachTagsAndMedia(cu.ID, "idea", idea.ID, nil, req.MediaIDs)
-	c.JSON(200, h.ideaDetail(idea.ID))
+	c.JSON(200, h.ideaDetailOf(&idea))
 }
 
 // UpdateIdea 更新灵感。
@@ -159,12 +184,7 @@ func (h *Handler) UpdateIdea(c *gin.Context) {
 		return
 	}
 	if req.MediaIDs != nil {
-		h.db.Model(&model.Media{}).Where("user_id = ? AND entity_type = 'idea' AND entity_id = ?", cu.ID, id).
-			Updates(map[string]interface{}{"entity_type": nil, "entity_id": nil})
-		for _, mid := range *req.MediaIDs {
-			h.db.Model(&model.Media{}).Where("id = ? AND user_id = ?", mid, cu.ID).
-				Updates(map[string]interface{}{"entity_type": "idea", "entity_id": id})
-		}
+		h.remountMediaOnUpdate(cu.ID, "idea", uint(id), *req.MediaIDs)
 	}
 	c.JSON(200, h.ideaDetail(uint(id)))
 }

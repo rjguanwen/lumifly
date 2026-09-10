@@ -33,6 +33,7 @@
               v-if="m.mimeType?.startsWith('image/')"
               :src="m.url"
               :alt="m.fileName"
+              loading="lazy"
               class="w-full aspect-square object-cover rounded-xl cursor-zoom-in hover:opacity-90 transition-opacity"
               @click="openMediaImage(m)"
             />

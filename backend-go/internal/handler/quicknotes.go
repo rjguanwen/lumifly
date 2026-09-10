@@ -19,8 +19,13 @@ func (h *Handler) quickNoteDetail(noteID uint) gin.H {
 	if err := h.db.First(&n, noteID).Error; err != nil {
 		return nil
 	}
+	return h.quickNoteDetailOf(&n)
+}
+
+// quickNoteDetailOf 用已取到的语录行组装详情，避免再查一次主行。
+func (h *Handler) quickNoteDetailOf(n *model.QuickNote) gin.H {
 	var links []model.QuickNoteTag
-	h.db.Where("quick_note_id = ?", noteID).Find(&links)
+	h.db.Where("quick_note_id = ?", n.ID).Find(&links)
 	ids := make([]uint, 0, len(links))
 	for _, l := range links {
 		ids = append(ids, l.TagID)
@@ -36,11 +41,9 @@ func (h *Handler) quickNoteDetail(noteID uint) gin.H {
 }
 
 // syncQuickNoteTags 全量替换某条语录的标签关联。
+// 删旧 + 批量写新合并为单事务（原先逐条 Create 各是一个写事务）。
 func (h *Handler) syncQuickNoteTags(noteID uint, tagIDs []uint) {
-	h.db.Where("quick_note_id = ?", noteID).Delete(&model.QuickNoteTag{})
-	for _, tid := range tagIDs {
-		h.db.Create(&model.QuickNoteTag{QuickNoteID: noteID, TagID: tid})
-	}
+	h.replaceTagLinks("quick", noteID, tagIDs)
 }
 
 func validateQuickNote(content string) string {
@@ -78,9 +81,24 @@ func (h *Handler) ListQuickNotes(c *gin.Context) {
 		serverError(c, "查询失败")
 		return
 	}
+	// 标签批量加载：原先每条语录 3 条 SQL，现在固定 2 条。
+	ids := make([]uint, 0, len(all))
+	for i := range all {
+		ids = append(ids, all[i].ID)
+	}
+	tagMap := h.tagsByEntities("quick_note_tags", "quick_note_id", ids)
+
 	items := make([]gin.H, 0, len(all))
-	for _, n := range all {
-		items = append(items, h.quickNoteDetail(n.ID))
+	for i := range all {
+		n := &all[i]
+		items = append(items, gin.H{
+			"id":        n.ID,
+			"userId":    n.UserID,
+			"content":   n.Content,
+			"createdAt": n.CreatedAt,
+			"updatedAt": n.UpdatedAt,
+			"tags":      tagMap[n.ID],
+		})
 	}
 	c.JSON(200, gin.H{"items": items, "total": total, "page": page, "limit": limit})
 }
@@ -113,7 +131,7 @@ func (h *Handler) CreateQuickNote(c *gin.Context) {
 		return
 	}
 	h.syncQuickNoteTags(n.ID, req.TagIDs)
-	c.JSON(200, h.quickNoteDetail(n.ID))
+	c.JSON(200, h.quickNoteDetailOf(&n))
 }
 
 // UpdateQuickNote 更新速记语录（可改内容与标签）。
