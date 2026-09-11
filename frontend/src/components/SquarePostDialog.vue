@@ -13,7 +13,7 @@
       <div class="report-head">
         <div>
           <div class="report-eyebrow">广场内容 · {{ post ? tMeta(post).label : '' }}</div>
-          <div class="report-title">{{ post?.title || (post?.sourceType === 'record' ? '一篇日记' : '分享内容') }}</div>
+          <div class="report-title">{{ post?.title || (post?.sourceType === 'record' ? '一篇随记' : '分享内容') }}</div>
         </div>
       </div>
     </template>

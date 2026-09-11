@@ -129,7 +129,7 @@
             <el-icon class="text-gray-300"><ArrowRight /></el-icon>
           </div>
         </div>
-        <el-empty v-else description="还没有日记，写下一篇吧" :image-size="64" class="py-6" />
+        <el-empty v-else description="还没有随记，写下一篇吧" :image-size="64" class="py-6" />
       </div>
 
       <div class="space-y-4">
@@ -209,7 +209,7 @@ const statCards = computed(() => {
 })
 
 const quickActions = [
-  { label: '写日记', desc: '记录今天的生活', icon: 'EditPen', to: '/records', bg: '#eef2ff', color: '#4A6CF7' },
+  { label: '写随记', desc: '记录今天的生活', icon: 'EditPen', to: '/records', bg: '#eef2ff', color: '#4A6CF7' },
   { label: '记大事', desc: '标记重要时刻', icon: 'Trophy', to: '/milestones', bg: '#fef3c7', color: '#d97706' },
   { label: '记灵感', desc: '捕捉灵光一闪', icon: 'Lightning', to: '/ideas', bg: '#ecfeff', color: '#0891b2' },
 ]

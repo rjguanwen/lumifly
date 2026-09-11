@@ -260,7 +260,7 @@ func (h *Handler) CommentCenterList(c *gin.Context) {
 				title, date = td.Title, td.Date
 			}
 			if title == "" {
-				title = "（无标题日记）"
+				title = "（无标题随记）"
 			}
 		} else {
 			if td, ok := msTitles[uint(tid)]; ok {

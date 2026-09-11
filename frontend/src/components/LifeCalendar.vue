@@ -50,7 +50,7 @@
         <!-- 常驻操作：无论该周是否已有内容均可直接新增 -->
         <div class="flex gap-3">
           <el-button type="primary" class="flex-1" @click="openRecordForm">
-            <el-icon class="mr-1"><EditPen /></el-icon>写日记
+            <el-icon class="mr-1"><EditPen /></el-icon>写随记
           </el-button>
           <el-button type="warning" plain class="flex-1" @click="openMilestoneForm">
             <el-icon class="mr-1"><Trophy /></el-icon>记大事
@@ -97,10 +97,10 @@
             <div v-for="r in cellRecordItems" :key="r.id" class="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5">
               <span v-if="moodEmoji(r.mood)" class="text-lg leading-none shrink-0">{{ moodEmoji(r.mood) }}</span>
               <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium text-gray-800 truncate">{{ r.title || '（无标题日记）' }}</div>
+                <div class="text-sm font-medium text-gray-800 truncate">{{ r.title || '（无标题随记）' }}</div>
                 <div class="text-xs text-gray-400 mt-0.5">{{ r.recordDate }}</div>
               </div>
-              <el-button size="small" text type="primary" @click="openComments(r.title || '日记', 'record', r.id)">
+              <el-button size="small" text type="primary" @click="openComments(r.title || '随记', 'record', r.id)">
                 <el-icon class="mr-0.5"><ChatLineSquare /></el-icon>评价
               </el-button>
               <el-button size="small" type="primary" plain @click="viewRecordItem(r)">查看记录</el-button>
@@ -108,14 +108,14 @@
           </div>
 
           <div v-else class="bg-gray-50 rounded-xl p-5 text-center">
-            <p class="text-sm text-gray-400">该周暂无日记</p>
+            <p class="text-sm text-gray-400">该周暂无随记</p>
           </div>
         </div>
       </div>
     </el-drawer>
 
     <!-- 记录详情弹框 -->
-    <el-dialog v-model="showRecordDetail" width="760px" top="5vh" destroy-on-close title="日记详情">
+    <el-dialog v-model="showRecordDetail" width="760px" top="5vh" destroy-on-close title="随记详情">
       <div v-if="detailRecord" class="space-y-4">
         <div class="flex flex-wrap items-center gap-2 text-sm text-gray-500">
           <span class="font-semibold text-gray-700">{{ detailRecord.recordDate }}</span>
@@ -139,14 +139,14 @@
           </template>
         </div>
         <div class="flex justify-end pt-1">
-          <el-button type="primary" plain @click="openComments(detailRecord.title || '日记', 'record', detailRecord.id)">
+          <el-button type="primary" plain @click="openComments(detailRecord.title || '随记', 'record', detailRecord.id)">
             <el-icon class="mr-1"><ChatLineSquare /></el-icon>私密评价
           </el-button>
         </div>
       </div>
     </el-dialog>
 
-    <!-- 写日记弹框 -->
+    <!-- 写随记弹框 -->
     <el-dialog v-model="showRecordForm" width="920px" top="5vh" destroy-on-close class="editor-dialog">
       <template #header>
         <div class="flex items-center gap-2.5">
@@ -154,7 +154,7 @@
             <el-icon :size="18"><Notebook /></el-icon>
           </div>
           <div>
-            <div class="text-base font-semibold text-gray-800">写一篇新日记</div>
+            <div class="text-base font-semibold text-gray-800">写一篇新随记</div>
             <div class="text-xs text-gray-400 font-normal">所见即所得编辑，支持标题、加粗、图片与链接</div>
           </div>
         </div>
@@ -183,7 +183,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showRecordForm = false">取消</el-button>
-        <el-button type="primary" :loading="savingRecord" @click="saveRecordFromCalendar">保存日记</el-button>
+        <el-button type="primary" :loading="savingRecord" @click="saveRecordFromCalendar">保存随记</el-button>
       </template>
     </el-dialog>
 
@@ -487,7 +487,7 @@ function viewRecordItem(r) {
   showRecordDetail.value = true
 }
 
-// ---------- 写日记弹框 ----------
+// ---------- 写随记弹框 ----------
 const showRecordForm = ref(false)
 const savingRecord = ref(false)
 const recordForm = reactive({
@@ -523,7 +523,7 @@ async function saveRecordFromCalendar() {
   savingRecord.value = true
   try {
     const created = await recordApi.create({ ...recordForm })
-    ElMessage.success('日记已保存')
+    ElMessage.success('随记已保存')
     showRecordForm.value = false
     if (selectedCell.value && created.recordDate >= selectedCell.value.startDate && created.recordDate <= selectedCell.value.endDate) {
       cellRecordItems.value.push(created)

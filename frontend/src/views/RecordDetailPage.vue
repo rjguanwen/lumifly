@@ -103,7 +103,7 @@ function edit() {
 
 async function remove() {
   try {
-    await ElMessageBox.confirm('确定删除这条日记？', '提示', { type: 'warning' })
+    await ElMessageBox.confirm('确定删除这条随记？', '提示', { type: 'warning' })
   } catch {
     return
   }

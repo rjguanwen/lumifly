@@ -96,7 +96,7 @@ type BookDomain struct {
 
 // 广场内容来源类型
 const (
-	PubRecord    = "record"    // 日记
+	PubRecord    = "record"    // 随记
 	PubMilestone = "milestone" // 大事记
 	PubIdea      = "idea"      // 想法灵感
 	PubBook      = "book"      // 读书记录（书评）

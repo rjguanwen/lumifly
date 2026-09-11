@@ -9,7 +9,7 @@
     @update:model-value="$emit('update:visible', $event)"
   >
     <p class="text-sm text-gray-500 -mt-2 mb-3">
-      这些评论仅你们双方可见，按日记 / 大事分组展示。点某条内容下的「回复」即可继续交流。
+      这些评论仅你们双方可见，按随记 / 大事分组展示。点某条内容下的「回复」即可继续交流。
     </p>
 
     <div v-if="loading" class="text-center py-10 text-gray-400">加载中…</div>
@@ -21,7 +21,7 @@
           <span
             class="px-1.5 py-0.5 rounded text-[11px] shrink-0"
             :style="g.targetType === 'milestone' ? { background: '#fef3c7', color: '#d97706' } : { background: '#eef2ff', color: '#4a6cf7' }"
-          >{{ g.targetType === 'milestone' ? '大事' : '日记' }}</span>
+          >{{ g.targetType === 'milestone' ? '大事' : '随记' }}</span>
           <span class="text-xs text-gray-400 shrink-0">{{ g.isMine ? '我的' : g.ownerName + ' 的' }}</span>
           <span class="text-sm font-medium text-gray-800 truncate flex-1">{{ g.title }}</span>
           <span class="text-[11px] text-gray-300">{{ g.date }}</span>

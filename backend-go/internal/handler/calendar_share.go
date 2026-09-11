@@ -206,7 +206,7 @@ func (h *Handler) commentOwnerCan(cuID, ownerID uint) bool {
 	return cuID == ownerID || h.isCalendarShared(ownerID, cuID)
 }
 
-// ListCalendarComments 某条日记/大事的私密评价（仅双方可见）。
+// ListCalendarComments 某条随记/大事的私密评价（仅双方可见）。
 func (h *Handler) ListCalendarComments(c *gin.Context) {
 	cu := currentUser(c)
 	ownerID, err := strconv.Atoi(c.Query("ownerId"))
@@ -245,7 +245,7 @@ func (h *Handler) ListCalendarComments(c *gin.Context) {
 	c.JSON(200, gin.H{"items": items})
 }
 
-// AddCalendarComment 对某条日记/大事添加私密评价。
+// AddCalendarComment 对某条随记/大事添加私密评价。
 func (h *Handler) AddCalendarComment(c *gin.Context) {
 	cu := currentUser(c)
 	var req struct {

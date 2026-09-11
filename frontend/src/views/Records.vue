@@ -6,7 +6,7 @@
         <p class="text-gray-500 mt-1">记录你的每一天</p>
       </div>
       <el-button type="primary" @click="openCreate">
-        <el-icon class="mr-1"><Plus /></el-icon>写日记
+        <el-icon class="mr-1"><Plus /></el-icon>写随记
       </el-button>
     </div>
 
@@ -60,7 +60,7 @@
         </div>
       </el-card>
     </div>
-    <el-empty v-else-if="loaded && !items.length" description="还没有日记，开始记录今天的生活吧" />
+    <el-empty v-else-if="loaded && !items.length" description="还没有随记，开始记录今天的生活吧" />
 
     <!-- 滚动加载：接近底部自动追加下一页 -->
     <div v-if="items.length && items.length < total" ref="sentinel" class="py-4 text-center text-sm text-gray-400">
@@ -78,7 +78,7 @@
             <el-icon :size="18"><component :is="editingId ? 'EditPen' : 'Notebook'" /></el-icon>
           </div>
           <div>
-            <div class="text-base font-semibold text-gray-800">{{ editingId ? '编辑日记' : '写一篇新日记' }}</div>
+            <div class="text-base font-semibold text-gray-800">{{ editingId ? '编辑随记' : '写一篇新随记' }}</div>
             <div class="text-xs text-gray-400 font-normal">所见即所得编辑，支持标题、加粗、图片与链接</div>
           </div>
         </div>
@@ -107,7 +107,7 @@
       </el-form>
       <template #footer>
         <el-button @click="resetForm">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveRecord">保存日记</el-button>
+        <el-button type="primary" :loading="saving" @click="saveRecord">保存随记</el-button>
       </template>
     </el-dialog>
   </div>
@@ -226,10 +226,10 @@ async function saveRecord() {
   try {
     if (editingId.value) {
       await recordApi.update(editingId.value, { ...form })
-      ElMessage.success('日记已更新')
+      ElMessage.success('随记已更新')
     } else {
       await recordApi.create({ ...form })
-      ElMessage.success('日记已保存')
+      ElMessage.success('随记已保存')
     }
     resetForm()
     load()
@@ -242,7 +242,7 @@ async function saveRecord() {
 
 async function deleteRecord(id) {
   try {
-    await ElMessageBox.confirm('确定删除这条日记？', '提示', { type: 'warning' })
+    await ElMessageBox.confirm('确定删除这条随记？', '提示', { type: 'warning' })
   } catch {
     return
   }

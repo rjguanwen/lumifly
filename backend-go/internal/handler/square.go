@@ -66,11 +66,11 @@ func (h *Handler) snapshot(userID uint, sourceType string, sourceID uint) (*mode
 	case model.PubRecord:
 		var r model.Record
 		if err := h.db.Where("id = ? AND user_id = ?", sourceID, userID).First(&r).Error; err != nil {
-			return nil, "日记不存在"
+			return nil, "随记不存在"
 		}
 		p.Title = r.Title
 		if p.Title == "" {
-			p.Title = "日记 · " + r.RecordDate
+			p.Title = "随记 · " + r.RecordDate
 		}
 		p.Content = r.Content
 		if d := contentDateISO(r.RecordDate); d != "" {

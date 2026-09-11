@@ -70,7 +70,7 @@
               {{ book.name }}
             </h3>
             <div class="flex gap-1 shrink-0" @click.stop>
-              <el-button size="small" text @click="editBook(book)"><el-icon><Edit /></el-icon></el-button>
+              <el-button size="small" text :loading="editLoadingId === book.id" @click="editBook(book)"><el-icon><Edit /></el-icon></el-button>
               <el-button size="small" text type="danger" @click="deleteBook(book.id)"><el-icon><Delete /></el-icon></el-button>
             </div>
           </div>
@@ -126,7 +126,7 @@
           </div>
         </div>
       </template>
-      <el-form label-position="top">
+      <el-form label-position="top" v-loading="formLoading" element-loading-text="正在加载书籍内容…">
         <div class="grid grid-cols-2 gap-x-5">
           <el-form-item label="书名" required>
             <el-input v-model="form.name" placeholder="书籍名称" />
@@ -160,7 +160,19 @@
           <el-input v-model="form.recommend" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="这本书值得推荐吗？一句话说说..." />
         </el-form-item>
         <el-form-item label="书评 / 读后感">
-          <RichTextEditor v-model="form.review" placeholder="写下你的书评与感悟，支持标题、加粗、列表等格式..." />
+          <div class="w-full">
+            <div v-if="useSourceMode" class="mb-2 text-xs text-amber-500">
+              书评段落极多（约 {{ reviewBlockCount }} 段），已切换为源码模式编辑，避免卡顿或内容被截断；保存后仍为富文本格式。
+            </div>
+            <el-input
+              v-if="useSourceMode"
+              v-model="form.review"
+              type="textarea"
+              :rows="16"
+              placeholder="书评 HTML 源码"
+            />
+            <RichTextEditor v-else v-model="form.review" placeholder="写下你的书评与感悟，支持标题、加粗、列表等格式..." />
+          </div>
         </el-form-item>
         <el-form-item label="标签">
           <TagInput v-model="form.tagIds" />
@@ -177,7 +189,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import RichTextEditor from '../components/RichTextEditor.vue'
@@ -192,6 +204,8 @@ const router = useRouter()
 const showForm = ref(false)
 const saving = ref(false)
 const editingId = ref(null)
+const editLoadingId = ref(null)
+const formLoading = ref(false)
 
 const filterStatus = ref('')
 const filterDomain = ref('')
@@ -233,6 +247,16 @@ const form = reactive({
   tagIds: [],
 })
 
+// 书评块级标签数量：段落极多时富文本编辑器（Quill）会长时间卡顿并截断内容，
+// 这种情况自动切换为源码模式（textarea）编辑，保证不卡顿、不丢内容。
+const reviewBlockCount = computed(() => {
+  const html = form.review || ''
+  if (!html) return 0
+  const m = html.match(/<(p|div|br|li|h[1-6]|blockquote)\b/gi)
+  return m ? m.length : 0
+})
+const useSourceMode = computed(() => reviewBlockCount.value > 2000)
+
 // 分页滚动加载：整页刷新调用 load()，滚动到底由内部自动追加下一页
 const { items, total, loading, loaded, sentinel, load } = useInfiniteScroll(
   (params) =>
@@ -250,10 +274,8 @@ async function handleEditQuery() {
   const id = Number(route.query.edit)
   try {
     const item = await bookApi.get(id)
-    if (item) {
-      fillForm(item)
-      showForm.value = true
-    }
+    // 详情已含书评，openEditForm 不会再重复请求
+    if (item) await openEditForm(item)
   } catch { /* 拦截器已提示 */ }
 }
 
@@ -286,9 +308,35 @@ function fillForm(book) {
   form.tagIds = book.tags?.map((t) => t.id) || []
 }
 
-function editBook(book) {
-  fillForm(book)
+// 编辑弹窗统一入口：
+// 1) 列表接口为减负不下发书评（review）大字段，若传入的是列表项需先拉详情，
+//    否则书评为空、保存时会把原书评覆盖掉；
+// 2) 先打开弹窗并显示加载遮罩，让浏览器完成绘制后再灌入内容，
+//    避免超大书评（数十万字）渲染时点击后长时间无响应。
+async function openEditForm(book) {
+  editLoadingId.value = book.id
+  formLoading.value = true
+  resetForm()
   showForm.value = true
+  await nextTick()
+  // 让出一帧，保证弹窗先绘制出来
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()))
+  try {
+    const hasReview = Object.prototype.hasOwnProperty.call(book, 'review')
+    const detail = hasReview ? book : await bookApi.get(book.id)
+    fillForm(detail || book)
+  } catch {
+    // 拉取详情失败：关闭弹窗，避免用残缺数据保存覆盖原书评
+    showForm.value = false
+  } finally {
+    await nextTick()
+    formLoading.value = false
+    editLoadingId.value = null
+  }
+}
+
+function editBook(book) {
+  return openEditForm(book)
 }
 
 function resetForm() {

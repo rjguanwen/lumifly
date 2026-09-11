@@ -75,24 +75,24 @@
                 <div class="flex items-center gap-2">
                   <span v-if="moodEmoji(r.mood)" class="text-lg leading-none">{{ moodEmoji(r.mood) }}</span>
                   <div class="flex-1 min-w-0">
-                    <div class="text-sm font-medium text-gray-800 truncate">{{ r.title || '（无标题日记）' }}</div>
+                    <div class="text-sm font-medium text-gray-800 truncate">{{ r.title || '（无标题随记）' }}</div>
                     <div class="text-xs text-gray-400">{{ r.recordDate }}</div>
                   </div>
-                  <el-button size="small" text type="primary" @click="openComments(r.title || '日记', 'record', r.id)">
+                  <el-button size="small" text type="primary" @click="openComments(r.title || '随记', 'record', r.id)">
                     <el-icon class="mr-0.5"><ChatLineSquare /></el-icon>评价
                   </el-button>
                   <el-button size="small" type="primary" plain @click="viewRecord(r)">查看</el-button>
                 </div>
               </div>
             </div>
-            <div v-else class="bg-gray-50 rounded-xl p-5 text-center text-sm text-gray-400">该周暂无日记</div>
+            <div v-else class="bg-gray-50 rounded-xl p-5 text-center text-sm text-gray-400">该周暂无随记</div>
           </div>
         </div>
       </div>
     </el-drawer>
 
     <!-- 记录查看 -->
-    <el-dialog v-model="showRecordDetail" width="760px" top="6vh" destroy-on-close title="日记内容">
+    <el-dialog v-model="showRecordDetail" width="760px" top="6vh" destroy-on-close title="随记内容">
       <div v-if="detailRecord" class="space-y-4">
         <div class="flex items-center gap-2 text-sm text-gray-500">
           <span class="font-semibold text-gray-700">{{ detailRecord.recordDate }}</span>
@@ -107,7 +107,7 @@
           </template>
         </div>
         <div class="flex justify-end">
-          <el-button type="primary" plain @click="openComments(detailRecord.title || '日记', 'record', detailRecord.id)">私密评价</el-button>
+          <el-button type="primary" plain @click="openComments(detailRecord.title || '随记', 'record', detailRecord.id)">私密评价</el-button>
         </div>
       </div>
     </el-dialog>
