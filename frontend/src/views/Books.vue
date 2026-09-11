@@ -75,9 +75,9 @@
             </div>
           </div>
 
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm text-gray-500">
-            <span v-if="book.author">{{ book.author }}</span>
-            <span v-if="book.readYear">{{ book.readYear }}</span>
+          <div class="flex items-center gap-3 mt-2 text-sm text-gray-500">
+            <span v-if="book.author" class="min-w-0 truncate">{{ book.author }}</span>
+            <span v-if="book.readYear" class="ml-auto shrink-0 text-gray-400">阅读于{{ book.readYear }}年</span>
           </div>
 
           <div class="flex flex-wrap items-center gap-2 mt-3">

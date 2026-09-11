@@ -21,7 +21,7 @@
             :style="{ background: statusColor(item.status) }"
           >{{ statusLabel(item.status) }}</span>
           <span v-if="item.author">作者：{{ item.author }}</span>
-          <span v-if="item.readYear">阅读于 {{ item.readYear }} 年</span>
+          <span v-if="item.readYear">阅读于{{ item.readYear }}年</span>
         </div>
 
         <div class="flex items-start justify-between flex-wrap gap-4">
