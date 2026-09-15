@@ -11,45 +11,41 @@
       </el-button>
     </div>
 
-    <!-- 首屏加载骨架 -->
-    <div v-if="loading && !items.length" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4" aria-hidden="true">
-      <div v-for="i in 6" :key="'sk' + i" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
-        <div class="skl h-4 w-11/12" />
-        <div class="skl h-4 w-3/4" />
-        <div class="flex gap-1.5">
-          <div class="skl h-5 w-12 rounded-full" />
-          <div class="skl h-5 w-12 rounded-full" />
+    <!-- 首屏加载骨架（与单行列表同形） -->
+    <div v-if="loading && !items.length" class="space-y-3" aria-hidden="true">
+      <div v-for="i in 5" :key="'sk' + i" class="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 flex items-start gap-3">
+        <div class="skl rounded-full w-5 h-5 shrink-0" />
+        <div class="flex-1 min-w-0 space-y-2.5">
+          <div class="skl h-4 w-3/4" />
+          <div class="skl h-3 w-1/3" />
         </div>
-        <div class="flex items-center justify-between pt-1">
-          <div class="skl h-3 w-16" />
-          <div class="skl h-6 w-14 rounded-full" />
-        </div>
+        <div class="skl h-6 w-28 rounded-full shrink-0" />
       </div>
     </div>
 
-    <!-- 平铺卡片 -->
-    <div v-else-if="items.length" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+    <!-- 每条语录一行，由新到旧（列表数据本身按 id 倒序返回） -->
+    <div v-else-if="items.length" class="space-y-3">
       <div
         v-for="n in items"
         :key="n.id"
-        class="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow p-5 flex flex-col gap-3"
+        class="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow px-5 py-4 flex flex-col sm:flex-row sm:items-start gap-3"
       >
-        <div class="flex items-start gap-2">
-          <el-icon class="text-cyan-500 mt-0.5 shrink-0" :size="18"><ChatDotSquare /></el-icon>
-          <p class="text-gray-800 leading-relaxed whitespace-pre-line break-words flex-1">{{ n.content }}</p>
+        <div class="flex items-start gap-2.5 flex-1 min-w-0">
+          <el-icon class="text-cyan-500 mt-1 shrink-0" :size="18"><ChatDotSquare /></el-icon>
+          <div class="min-w-0 flex-1">
+            <p class="text-gray-800 leading-relaxed whitespace-pre-line break-words">{{ n.content }}</p>
+            <div v-if="n.tags?.length" class="flex flex-wrap gap-1 mt-2">
+              <span
+                v-for="tag in n.tags"
+                :key="tag.id"
+                class="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600"
+              >{{ tag.name }}</span>
+            </div>
+          </div>
         </div>
 
-        <div v-if="n.tags?.length" class="flex flex-wrap gap-1">
-          <span
-            v-for="tag in n.tags"
-            :key="tag.id"
-            class="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600"
-          >{{ tag.name }}</span>
-        </div>
-
-        <div class="flex items-center gap-1 border-t border-gray-50 pt-2.5">
-          <span class="text-xs text-gray-400 mr-1">{{ fmtDate(n.createdAt) }}</span>
-          <div class="flex-1" />
+        <div class="flex items-center gap-1 shrink-0 self-end sm:self-start">
+          <span class="text-xs text-gray-400 mr-1 whitespace-nowrap">{{ fmtDate(n.createdAt) }}</span>
           <el-button size="small" text @click="editNote(n)">
             <el-icon><Edit /></el-icon><span class="ml-0.5">编辑</span>
           </el-button>
