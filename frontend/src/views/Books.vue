@@ -100,6 +100,17 @@
               {{ tag.name }}
             </span>
           </div>
+
+          <!-- 广场共享状态 / 发布入口 -->
+          <div class="flex justify-end mt-3" @click.stop>
+            <SquarePublishButton
+              :state="pubMap[book.id]"
+              :loading="publishingId === book.id"
+              @publish="publishItem(book)"
+              @unpublish="unpublishItem(book)"
+              @pending="pendingItem(book)"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -197,7 +208,9 @@ import TagInput from '../components/TagInput.vue'
 import StarRating from '../components/StarRating.vue'
 import DomainManageDialog from '../components/DomainManageDialog.vue'
 import { bookApi, bookDomainApi } from '../api'
+import SquarePublishButton from '../components/SquarePublishButton.vue'
 import { useInfiniteScroll } from '../composables/useInfiniteScroll'
+import { useSquarePublish } from '../composables/useSquarePublish'
 
 const route = useRoute()
 const router = useRouter()
@@ -268,6 +281,15 @@ const { items, total, loading, loaded, sentinel, load } = useInfiniteScroll(
     }),
   { pageSize: 24 },
 )
+
+// 发布到广场状态：一次拉取我发布的书籍，本地映射（列表变化自动刷新）
+const {
+  pubMap,
+  publishingId,
+  publish: publishItem,
+  unpublish: unpublishItem,
+  pending: pendingItem,
+} = useSquarePublish('book', items, { label: '书籍' })
 
 async function handleEditQuery() {
   if (!route.query.edit) return

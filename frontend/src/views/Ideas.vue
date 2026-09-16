@@ -50,8 +50,17 @@
               {{ tag.name }}
             </span>
           </div>
-          <div class="text-xs text-gray-400 pt-1">
-            <span>{{ idea.createdAt?.slice(0, 10) }}</span>
+          <div class="flex items-center gap-2 pt-1" @click.stop>
+            <span class="text-xs text-gray-400">{{ idea.createdAt?.slice(0, 10) }}</span>
+            <div class="ml-auto">
+              <SquarePublishButton
+                :state="pubMap[idea.id]"
+                :loading="publishingId === idea.id"
+                @publish="publishItem(idea)"
+                @unpublish="unpublishItem(idea)"
+                @pending="pendingItem(idea)"
+              />
+            </div>
           </div>
         </div>
       </el-card>
@@ -105,7 +114,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import RichTextEditor from '../components/RichTextEditor.vue'
 import MediaUploader from '../components/MediaUploader.vue'
 import { ideaApi } from '../api'
+import SquarePublishButton from '../components/SquarePublishButton.vue'
 import { useInfiniteScroll } from '../composables/useInfiniteScroll'
+import { useSquarePublish } from '../composables/useSquarePublish'
 
 const route = useRoute()
 const router = useRouter()
@@ -124,6 +135,15 @@ const { items, total, loading, loaded, sentinel, load } = useInfiniteScroll(
   (params) => ideaApi.list(params),
   { pageSize: 24 },
 )
+
+// 发布到广场状态：一次拉取我发布的灵感，本地映射（列表变化自动刷新）
+const {
+  pubMap,
+  publishingId,
+  publish: publishItem,
+  unpublish: unpublishItem,
+  pending: pendingItem,
+} = useSquarePublish('idea', items, { label: '灵感' })
 
 async function handleEditQuery() {
   if (!route.query.edit) return

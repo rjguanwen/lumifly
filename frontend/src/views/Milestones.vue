@@ -17,15 +17,28 @@
         :key="cat.value"
         :type="selectedCategory === cat.value ? 'primary' : ''"
         size="small"
-        @click="selectedCategory = selectedCategory === cat.value ? '' : cat.value"
+        @click="toggleCategory(cat.value)"
       >
         {{ cat.label }}
       </el-button>
     </div>
 
-    <!-- 时间线 -->
-    <div v-if="filteredItems.length" class="timeline">
-      <div v-for="milestone in filteredItems" :key="milestone.id" class="timeline-item">
+    <!-- 首屏加载骨架 -->
+    <div v-if="loading && !items.length" class="space-y-4" aria-hidden="true">
+      <div v-for="i in 4" :key="'sk' + i" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+        <div class="flex items-center gap-2">
+          <div class="skl h-3 w-24" />
+          <div class="skl h-5 w-14 rounded-full" />
+        </div>
+        <div class="skl h-5 w-1/3" />
+        <div class="skl h-3 w-full" />
+        <div class="skl h-3 w-4/5" />
+      </div>
+    </div>
+
+    <!-- 时间线（由新到旧，滚动到底自动追加下一页） -->
+    <div v-else-if="items.length" class="timeline">
+      <div v-for="milestone in items" :key="milestone.id" class="timeline-item">
         <span class="timeline-dot" :style="{ background: categoryColor(milestone.category) }" />
         <el-card shadow="hover" class="!rounded-2xl group">
           <div class="flex items-start justify-between">
@@ -48,6 +61,13 @@
               </div>
             </div>
             <div class="flex gap-1 ml-4 shrink-0">
+              <SquarePublishButton
+                :state="pubMap[milestone.id]"
+                :loading="publishingId === milestone.id"
+                @publish="publishItem(milestone)"
+                @unpublish="unpublishItem(milestone)"
+                @pending="pendingItem(milestone)"
+              />
               <el-button size="small" text @click="editMilestone(milestone)"><el-icon><Edit /></el-icon></el-button>
               <el-button size="small" text type="danger" @click="deleteMilestone(milestone.id)"><el-icon><Delete /></el-icon></el-button>
             </div>
@@ -55,7 +75,15 @@
         </el-card>
       </div>
     </div>
-    <el-empty v-else description="还没有大事记，记录你人生中的重要时刻吧" />
+    <el-empty v-else-if="loaded && !items.length" description="还没有大事记，记录你人生中的重要时刻吧" />
+
+    <!-- 滚动加载：接近底部自动追加下一页 -->
+    <div v-if="items.length && items.length < total" ref="sentinel" class="py-4 text-center text-sm text-gray-400">
+      {{ loading ? '加载中…' : '继续下滑加载更多' }}
+    </div>
+    <div v-if="items.length && items.length >= total && total > 0" class="py-4 text-center text-xs text-gray-300">
+      — 已经到底啦 —
+    </div>
 
     <!-- 新建/编辑弹窗 -->
     <el-dialog v-model="showForm" width="920px" top="5vh" destroy-on-close class="editor-dialog">
@@ -114,6 +142,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import RichTextEditor from '../components/RichTextEditor.vue'
 import MediaUploader from '../components/MediaUploader.vue'
 import { milestoneApi } from '../api'
+import SquarePublishButton from '../components/SquarePublishButton.vue'
+import { useInfiniteScroll } from '../composables/useInfiniteScroll'
+import { useSquarePublish } from '../composables/useSquarePublish'
 import {
   milestoneCategories,
   categoryColor,
@@ -127,7 +158,6 @@ const showForm = ref(false)
 const saving = ref(false)
 const editingId = ref(null)
 const selectedCategory = ref('')
-const items = ref([])
 
 const form = reactive({
   title: '',
@@ -139,20 +169,31 @@ const form = reactive({
   mediaObjects: [],
 })
 
-const filteredItems = computed(() => {
-  if (!selectedCategory.value) return items.value
-  return items.value.filter((m) => m.category === selectedCategory.value)
-})
-
 const importanceLabel = computed(() => ['', '普通', '值得记住', '重要', '非常重要', '人生大事'][form.importance] || '')
 
-async function load() {
-  try {
-    const data = await milestoneApi.list({ limit: 100 })
-    items.value = data.items || []
-  } catch {
-    /* 忽略 */
-  }
+// 分页滚动加载：整页刷新调用 load()，滚动到底由内部自动追加下一页
+const { items, total, loading, loaded, sentinel, load } = useInfiniteScroll(
+  (params) =>
+    milestoneApi.list({
+      ...params,
+      ...(selectedCategory.value ? { category: selectedCategory.value } : {}),
+    }),
+  { pageSize: 24 },
+)
+
+// 发布到广场状态：一次拉取我发布的大事记，本地映射（列表变化自动刷新）
+const {
+  pubMap,
+  publishingId,
+  publish: publishItem,
+  unpublish: unpublishItem,
+  pending: pendingItem,
+} = useSquarePublish('milestone', items, { label: '大事记' })
+
+// 分类筛选交给后端（与分页保持一致），切换时重新从第一页加载
+function toggleCategory(value) {
+  selectedCategory.value = selectedCategory.value === value ? '' : value
+  load()
 }
 
 async function handleEditQuery() {
@@ -301,5 +342,20 @@ async function deleteMilestone(id) {
 
 .timeline-item:hover .timeline-dot {
   transform: translate(-50%, -50%) scale(1.18);
+}
+
+/* 加载骨架占位块（shimmer 动效由 base.css 全局 @keyframes skl-shimmer 提供）
+   不要依赖 base.css 的全局 .skl（Tailwind 处理后该顶层规则会丢失），必须在 scoped 内定义 */
+.skl {
+  border-radius: 6px;
+  background-color: #e2e8f0;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 220% 100%;
+  animation: skl-shimmer 1.4s ease-in-out infinite;
 }
 </style>

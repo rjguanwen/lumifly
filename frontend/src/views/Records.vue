@@ -54,6 +54,13 @@
             </div>
           </div>
           <div class="flex gap-1 ml-4 shrink-0">
+            <SquarePublishButton
+              :state="pubMap[record.id]"
+              :loading="publishingId === record.id"
+              @publish="publishItem(record)"
+              @unpublish="unpublishItem(record)"
+              @pending="pendingItem(record)"
+            />
             <el-button size="small" text @click="editRecord(record)"><el-icon><Edit /></el-icon></el-button>
             <el-button size="small" text type="danger" @click="deleteRecord(record.id)"><el-icon><Delete /></el-icon></el-button>
           </div>
@@ -121,9 +128,11 @@ import RichTextEditor from '../components/RichTextEditor.vue'
 import MediaUploader from '../components/MediaUploader.vue'
 import TagInput from '../components/TagInput.vue'
 import MoodPicker from '../components/MoodPicker.vue'
+import SquarePublishButton from '../components/SquarePublishButton.vue'
 import { recordApi } from '../api'
 import { moodEmoji } from '../utils/helpers'
 import { useInfiniteScroll } from '../composables/useInfiniteScroll'
+import { useSquarePublish } from '../composables/useSquarePublish'
 
 const route = useRoute()
 const router = useRouter()
@@ -152,6 +161,15 @@ const { items, total, loading, loaded, sentinel, load } = useInfiniteScroll(
     }),
   { pageSize: 30 },
 )
+
+// 发布到广场状态：一次拉取我发布的随记，本地映射（列表变化自动刷新）
+const {
+  pubMap,
+  publishingId,
+  publish: publishItem,
+  unpublish: unpublishItem,
+  pending: pendingItem,
+} = useSquarePublish('record', items, { label: '随记' })
 
 async function handleEditQuery() {
   if (!route.query.edit) return

@@ -41,15 +41,22 @@ func (h *Handler) milestoneDetailOf(ms *model.Milestone) gin.H {
 	}
 }
 
-// ListMilestones 大事记列表（支持 category/from/to 过滤）。
+// ListMilestones 大事记列表（支持 category/from/to 过滤 + 分页，供前端滚动加载）。
 func (h *Handler) ListMilestones(c *gin.Context) {
 	cu := currentUser(c)
 	category := c.Query("category")
 	from := c.Query("from")
 	to := c.Query("to")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
 
-	var all []model.Milestone
-	q := h.db.Where("user_id = ?", cu.ID).Order("event_date DESC")
+	q := h.db.Model(&model.Milestone{}).Where("user_id = ?", cu.ID)
 	if category != "" {
 		q = q.Where("category = ?", category)
 	}
@@ -59,7 +66,15 @@ func (h *Handler) ListMilestones(c *gin.Context) {
 	if to != "" {
 		q = q.Where("event_date <= ?", to)
 	}
-	if err := q.Find(&all).Error; err != nil {
+
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		serverError(c, "查询失败")
+		return
+	}
+
+	var all []model.Milestone
+	if err := q.Order("event_date DESC, id DESC").Offset((page - 1) * limit).Limit(limit).Find(&all).Error; err != nil {
 		serverError(c, "查询失败")
 		return
 	}
@@ -89,7 +104,7 @@ func (h *Handler) ListMilestones(c *gin.Context) {
 			"media":       mediaMap[m.ID],
 		})
 	}
-	c.JSON(200, gin.H{"items": items, "total": len(items)})
+	c.JSON(200, gin.H{"items": items, "total": total, "page": page, "limit": limit})
 }
 
 // GetMilestone 大事记详情。
