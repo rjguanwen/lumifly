@@ -72,13 +72,38 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { uploadApi } from '../api'
+
+// 附件允许的图片类型。与后端 upload.go 的 allowedImageTypes 逐项对齐：
+// 后端只接受这四种图片，多写会让用户选中后才被拒，少写会挡住本来支持的格式。
+// 用「扩展名 + MIME」两种写法：Windows 文件选择框按扩展名过滤更可靠，
+// 只写 MIME 时部分系统会把 .jpg 也置灰。
+const DEFAULT_ACCEPT = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  '.mp4',
+  '.webm',
+  'video/mp4',
+  'video/webm',
+].join(',')
 
 const props = defineProps({
   modelValue: { type: Array, default: () => [] },
   initialItems: { type: Array, default: () => [] }, // 编辑时已有关联附件 [{id,url,fileName,mimeType}]
+  // 默认空串 → 回落到 DEFAULT_ACCEPT。注意这里必须用 computed 得到**字符串**：
+  // 曾经写成 `const accept = () => props.accept || '...'` 并按 `:accept="accept"` 绑定，
+  // 结果传给 <input> 的是函数源码 "() => props.accept || ..."，
+  // 浏览器无法识别这个 accept 值，就回退成它自己的兜底类型（表现为
+  // 文件选择框默认显示「自定义文件(*.m4v;*.mp4)」）。
   accept: { type: String, default: '' },
   multiple: { type: Boolean, default: false },
 })
@@ -89,7 +114,10 @@ const fileInput = ref(null)
 const isDragging = ref(false)
 const uploads = ref([])
 
-const accept = () => props.accept || 'image/*,video/mp4,video/webm'
+const accept = computed(() => {
+  const custom = (props.accept || '').trim()
+  return custom || DEFAULT_ACCEPT
+})
 
 // 44px 的格子不该拉原图（单张可达数 MB）。接口没给 thumbUrl 时按同规则兜底拼一个，
 // 后端 /api/uploads 支持 ?w=64；万一生成失败会自动回落原图，不会裂图。
