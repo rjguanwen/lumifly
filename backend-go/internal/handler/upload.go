@@ -73,6 +73,19 @@ func (h *Handler) UploadFile(c *gin.Context) {
 		return
 	}
 
+	// 图片压缩：超过 1MB 的 JPEG/PNG 重编码为 JPEG（长边上限 1920），只保留压缩后的一份。
+	// 压缩失败不影响上传（保留原文件），保证"上传成功"这条主路径永不因优化而失败。
+	if isImage && shouldCompress(ext, fileHeader.Size) {
+		if res, err := compressImageInPlace(filePath); err == nil && res.Changed {
+			if base := filepath.Base(res.Path); base != fileName {
+				fileName = base
+				filePath = res.Path
+			}
+			mimeType = "image/jpeg"
+			fileHeader.Size = res.Size
+		}
+	}
+
 	relativePath := subDir + "/" + fileName
 	entityType := c.PostForm("entityType")
 	var entityID *uint
@@ -102,6 +115,7 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"id":       m.ID,
 		"url":      "/api/uploads/" + relativePath,
+		"thumbUrl": thumbURLFor(m.MimeType, m.FilePath),
 		"fileName": m.FileName,
 		"mimeType": m.MimeType,
 		"fileSize": m.FileSize,
@@ -193,6 +207,10 @@ func (h *Handler) DeleteMedia(c *gin.Context) {
 }
 
 // ServeFile 提供上传文件的静态访问（/api/uploads/images/xxx.png）。
+//
+// 支持 ?w=<白名单宽度> 按需生成缩略图：列表页的 64px/80px 小格子改用它，
+// 避免为了显示缩略图而下载并解码 2~5 MB 的原图。参数不合法或生成失败时
+// 一律回落到原图（宁可慢，也不能让图片裂掉）。
 func (h *Handler) ServeFile(c *gin.Context) {
 	rel := strings.TrimPrefix(c.Param("filepath"), "/")
 	if rel == "" {
@@ -213,7 +231,32 @@ func (h *Handler) ServeFile(c *gin.Context) {
 		notFound(c, "文件不存在")
 		return
 	}
+
+	// 缩略图分支：仅图片、且宽度在白名单内才生成
+	if w := parseThumbWidth(c.Query("w")); w > 0 {
+		if isImageExt(filepath.Ext(rel)) {
+			if thumb, ok := h.ensureThumb(full, rel, w); ok {
+				// 文件名是 UUID，同一 URL 内容永不变化 → 可安全 immutable 强缓存
+				c.Header("Cache-Control", "public, max-age=31536000, immutable")
+				c.Header("Vary", "Accept")
+				c.File(thumb)
+				return
+			}
+		}
+	}
+
+	// 原图：给一天的缓存，减少重复进入列表时的重传（文件名不变，但允许被覆盖的场景留余地）
+	c.Header("Cache-Control", "public, max-age=86400")
 	c.File(full)
+}
+
+// isImageExt 判断扩展名是否属于可生成缩略图的图片类型。
+func isImageExt(ext string) bool {
+	switch strings.ToLower(ext) {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
+		return true
+	}
+	return false
 }
 
 func strPtr(s string) *string {

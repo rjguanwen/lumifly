@@ -55,8 +55,8 @@
               <div v-if="m.description" class="text-sm text-gray-700 prose prose-sm mt-1" v-html="m.description" />
               <div v-if="m.media?.length" class="mt-2 space-y-2">
                 <template v-for="med in m.media" :key="med.id">
-                  <img v-if="med.mimeType?.startsWith('image/')" :src="med.url" alt="" loading="lazy" class="w-full rounded-lg object-cover max-h-60 cursor-pointer" @click.stop="openGallery(m.media, med.url)" />
-                  <video v-else-if="med.mimeType?.startsWith('video/')" :src="med.url" controls class="w-full rounded-lg max-h-60" />
+                  <img v-if="med.mimeType?.startsWith('image/')" :src="med.thumbUrl || med.url" alt="" loading="lazy" decoding="async" class="w-full rounded-lg object-cover max-h-60 bg-gray-100 cursor-pointer" @click.stop="openGallery(m.media, med.url)" />
+                  <video v-else-if="med.mimeType?.startsWith('video/')" :src="med.url" controls preload="metadata" class="w-full rounded-lg max-h-60" />
                 </template>
               </div>
               <div class="flex justify-end mt-2">
@@ -102,7 +102,7 @@
         <div v-if="detailRecord.content" class="prose max-w-none" v-html="detailRecord.content" />
         <div v-if="detailRecord.media?.length" class="grid grid-cols-2 gap-3">
           <template v-for="med in detailRecord.media" :key="med.id">
-            <img v-if="med.mimeType?.startsWith('image/')" :src="med.url" alt="" loading="lazy" class="w-full rounded-xl object-cover aspect-square cursor-pointer" @click="openGallery(detailRecord.media, med.url)" />
+            <img v-if="med.mimeType?.startsWith('image/')" :src="med.thumbUrl || med.url" alt="" loading="lazy" decoding="async" class="w-full rounded-xl object-cover aspect-square bg-gray-100 cursor-pointer" @click="openGallery(detailRecord.media, med.url)" />
             <video v-else-if="med.mimeType?.startsWith('video/')" :src="med.url" controls class="w-full rounded-xl max-h-56" />
           </template>
         </div>

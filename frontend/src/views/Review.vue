@@ -28,13 +28,21 @@
         </div>
         <div class="px-5 py-4">
           <h3 class="font-semibold text-gray-900 mb-1.5">{{ p.title }}</h3>
-          <div class="prose prose-sm max-w-none text-gray-700 max-h-64 overflow-y-auto" v-html="p.content" />
+          <!-- 审核需要看全文；正文里的图片由后端缩略图参数控制体积（见 contentWithMedia）。
+               这里限制高度并允许滚动，避免一条长内容把整页撑开。 -->
+          <div class="prose prose-sm max-w-none text-gray-700 max-h-64 overflow-y-auto review-content" v-html="p.content" />
         </div>
         <div class="px-5 py-3 border-t border-gray-50 flex justify-end gap-2 bg-gray-50/60">
           <el-button size="small" @click="reject(p)">驳回</el-button>
           <el-button size="small" type="primary" @click="approve(p)">通过并发布</el-button>
         </div>
       </div>
+    </div>
+    <div v-if="items.length && items.length < total" ref="sentinel" class="py-6 text-center text-sm text-gray-400">
+      {{ loading ? '加载中…' : '继续下滑加载更多' }}
+    </div>
+    <div v-else-if="items.length && items.length >= total" class="py-4 text-center text-xs text-gray-300">
+      — 共 {{ total }} 条待审核，已全部显示 —
     </div>
     <el-empty v-else-if="!loading" description="暂无待审核内容" />
 
@@ -69,7 +77,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import UserAvatar from '../components/UserAvatar.vue'
 import { adminApi, moderateApi } from '../api'
@@ -79,8 +87,14 @@ import { squareTypeOf } from '../utils/squareMeta'
 const auth = useAuthStore()
 const isAdmin = computed(() => auth.user?.role === 'admin')
 
+// 审核队列分页：与广场流一致，每页 20。原先接口一次性返回全部待审内容
+// 且带完整正文，积压时单次响应可达数十 MB，页面会长时间白屏。
+const PAGE_SIZE = 20
 const items = ref([])
+const total = ref(0)
+const page = ref(1)
 const loading = ref(false)
+const sentinel = ref(null)
 
 const fmtTime = (s) => (s ? s.slice(0, 16).replace('T', ' ') : '')
 const catLabel = (cat) => (labels.value[cat] || cat)
@@ -92,17 +106,66 @@ function catList(s) {
   return String(s || '').split(',').filter(Boolean)
 }
 
-async function load() {
+// reset=true 重新从第一页拉（审批后、首次进入）；false 追加下一页
+async function load(reset = true) {
+  if (loading.value && !reset) return
   loading.value = true
+  const targetPage = reset ? 1 : page.value + 1
+  if (reset) {
+    page.value = 1
+    items.value = []
+  }
   try {
-    const data = await moderateApi.queue()
-    items.value = data.items || []
+    const data = await moderateApi.queue({ page: targetPage, limit: PAGE_SIZE })
+    const list = data.items || []
+    items.value = reset ? list : items.value.concat(list)
+    total.value = Number(data.total) || items.value.length
+    page.value = targetPage
   } catch {
     /* 拦截器已提示 */
   } finally {
     loading.value = false
   }
 }
+
+function loadMore() {
+  if (items.value.length >= total.value) return
+  load(false)
+}
+
+// 滚动到底部哨兵时追加下一页（滚动容器是 el-main）
+let scrollEl = null
+function findScrollParent(el) {
+  while (el && el !== document.body) {
+    const s = window.getComputedStyle(el)
+    if (s.overflowY === 'auto' || s.overflowY === 'scroll') return el
+    el = el.parentElement
+  }
+  return window
+}
+function onNearBottom() {
+  if (loading.value || items.value.length >= total.value) return
+  const el = scrollEl === window ? document.documentElement : scrollEl
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) loadMore()
+}
+
+watch(
+  total,
+  async () => {
+    await nextTick()
+    if (!sentinel.value || items.value.length >= total.value) return
+    if (!scrollEl) {
+      scrollEl = findScrollParent(sentinel.value)
+      scrollEl.addEventListener('scroll', onNearBottom, { passive: true })
+    }
+    // 只在内容撑不满视口时才自动补页
+    const el = scrollEl === window ? document.documentElement : scrollEl
+    if (el.scrollHeight <= el.clientHeight + 300) loadMore()
+  },
+  { flush: 'post' },
+)
+
+onBeforeUnmount(() => scrollEl?.removeEventListener('scroll', onNearBottom))
 
 async function approve(p) {
   try {
@@ -173,5 +236,18 @@ async function saveTerms() {
   }
 }
 
-onMounted(load)
+onMounted(() => load())
 </script>
+
+<style scoped>
+/* 审核正文里的图片：懒加载 + 限制最大高度，避免一条长内容把卡片撑得过高。
+   正文由后端生成（新快照已带 ?w=1024 缩略图），这里只约束视觉尺寸。 */
+.review-content :deep(img) {
+  max-width: 100%;
+  height: auto;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #f3f4f6;
+}
+</style>

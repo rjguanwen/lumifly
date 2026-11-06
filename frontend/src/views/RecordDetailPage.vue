@@ -33,10 +33,11 @@
           <template v-for="m in item.media" :key="m.id">
             <img
               v-if="m.mimeType?.startsWith('image/')"
-              :src="m.url"
+              :src="m.thumbUrl || m.url"
               :alt="m.fileName"
               loading="lazy"
-              class="w-full aspect-square object-cover rounded-xl cursor-zoom-in hover:opacity-90 transition-opacity"
+              decoding="async"
+              class="w-full aspect-square object-cover rounded-xl bg-gray-100 cursor-zoom-in hover:opacity-90 transition-opacity"
               @click="openMediaImage(m)"
             />
             <video v-else-if="m.mimeType?.startsWith('video/')" :src="m.url" controls class="w-full rounded-xl max-h-72" />

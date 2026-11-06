@@ -162,7 +162,7 @@ export const squareApi = {
 
 // ===== 内容审核（审核员/管理员） =====
 export const moderateApi = {
-  queue: () => api.get('/moderation/queue'),
+  queue: (params) => api.get('/moderation/queue', { params }),
   approve: (id) => api.post(`/moderation/queue/${id}/approve`),
   reject: (id) => api.post(`/moderation/queue/${id}/reject`),
   terms: () => api.get('/moderation/terms'),

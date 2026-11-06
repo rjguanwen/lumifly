@@ -141,7 +141,33 @@ func (h *Handler) snapshot(userID uint, sourceType string, sourceID uint) (*mode
 	return p, ""
 }
 
+// pubSnapImageWidth 快照正文里图片使用的缩略图宽度。
+// 详情页正文最长约 900px，2x DPR 就是 1800；取 1024 是画质与体积的折中
+// （原图常见 2730×1535、约 4.7 MB，缩到 1024 宽通常只有 100~200 KB）。
+// 注意：本函数只影响**新发布**的快照。历史快照里的原图 URL 保持原样，
+// 按需求不做数据库迁移；用户重新发布（撤回后重发）时会按新规则重建快照。
+const pubSnapImageWidth = 1024
+
+// withThumbWidth 给 /api/uploads/ 下的图片 URL 追加缩略图宽度参数。
+// 已经是缩略图 URL（已带 ?w=）、外链、data: 内联图一律原样返回。
+func withThumbWidth(u string, w int) string {
+	if !strings.HasPrefix(u, "/api/uploads/") {
+		return u
+	}
+	if strings.Contains(u, "w=") {
+		return u
+	}
+	sep := "?"
+	if strings.Contains(u, "?") {
+		sep = "&"
+	}
+	return u + sep + "w=" + strconv.Itoa(w)
+}
+
 // contentWithMedia 在正文末尾追加附件媒体 HTML（图片/视频）。
+// 图片带 ?w= 缩略图参数 + 显式 width/height 属性：
+//   - 缩略图：避免在广场详情页（正文宽约 900px）加载 4~5 MB 的原图；
+//   - 宽高属性：让浏览器在图片到达前预留高度，消除正文渲染后的整页跳动。
 func contentWithMedia(html string, media []gin.H) string {
 	var b strings.Builder
 	b.WriteString(html)
@@ -152,7 +178,8 @@ func contentWithMedia(html string, media []gin.H) string {
 			continue
 		}
 		if strings.HasPrefix(mt, "image/") {
-			b.WriteString(`<p class="pub-media"><img src="` + u + `" alt="" style="max-width:100%;border-radius:12px;margin:8px 0" /></p>`)
+			b.WriteString(`<p class="pub-media"><img src="` + withThumbWidth(u, pubSnapImageWidth) +
+				`" alt="" width="` + strconv.Itoa(pubSnapImageWidth) + `" style="max-width:100%;height:auto;border-radius:12px;margin:8px 0" /></p>`)
 		} else if strings.HasPrefix(mt, "video/") {
 			b.WriteString(`<p class="pub-media"><video controls preload="metadata" src="` + u + `" style="max-width:100%;border-radius:12px;margin:8px 0"></video></p>`)
 		}
@@ -214,8 +241,18 @@ func contentImageURLs(s string) []string {
 				seg = seg[:k]
 				continue
 			}
-			out = append(out, s[vStart:vStart+q])
-			s = s[vStart+q+1:] // 从整条匹配之后继续
+			cand := s[vStart : vStart+q]
+			// 跳过 data: 内联图：历史快照里有把整张图 base64 塞进正文的帖子
+			// （实测单条 1.5 MB 正文就是一张内联图）。把它当卡片封面会让列表接口
+			// 凭空多下发 1.5MB 且无法缩略图化，故不作为封面候选，继续找下一张。
+			if !strings.HasPrefix(cand, "data:") {
+				out = append(out, cand)
+				s = s[vStart+q+1:] // 从整条匹配之后继续
+				found = true
+				break
+			}
+			// data: 图：跳过这一整个 img 标签，继续扫描后续标签
+			s = s[winEnd:]
 			found = true
 			break
 		}
@@ -251,8 +288,23 @@ func pubItemWith(p *model.Publication, brief userBrief, stat pubStat) gin.H {
 func pubListItemWith(p *model.Publication, brief userBrief, stat pubStat) gin.H {
 	m := pubItemWith(p, brief, stat)
 	delete(m, "content")
-	m["contentImages"] = contentImageURLs(p.Content)
+	m["contentImages"] = cardImageURLs(p.Content)
 	return m
+}
+
+// cardImageWidth 广场卡片封面使用的缩略图宽度。
+// 卡片宽约 300px（xl 四列时更窄），2x DPR 取 512 已足够清晰。
+const cardImageWidth = 512
+
+// cardImageURLs 在 contentImageURLs 结果上追加缩略图宽度参数，供卡片直接当封面用。
+// 历史快照里的原图 URL 在这里被改写为缩略图 URL —— 这只是读取侧改写，
+// publications.content 本身不动，所以对老帖子同样有效（卡片封面不受"只改新发布"限制）。
+func cardImageURLs(content string) []string {
+	urls := contentImageURLs(content)
+	for i := range urls {
+		urls[i] = withThumbWidth(urls[i], cardImageWidth)
+	}
+	return urls
 }
 
 // pubItemsJSON 批量组装帖子列表（含整段正文，供需要直接渲染全文的调用方使用）。

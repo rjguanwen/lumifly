@@ -49,14 +49,17 @@
                 <span v-for="i in milestone.importance" :key="i" class="text-amber-400 text-xs">★</span>
               </div>
               <h3 class="text-lg font-semibold text-gray-900 mb-1">{{ milestone.title }}</h3>
-              <div v-if="milestone.description" class="text-gray-600 text-sm line-clamp-3 prose prose-sm" v-html="milestone.description" />
-              <div v-if="milestone.media?.length" class="flex gap-2 mt-3">
+              <p v-if="milestone.excerpt || milestone.description" class="text-gray-600 text-sm line-clamp-3">{{ milestone.excerpt || '（无描述内容）' }}</p>
+              <div v-if="imageList(milestone).length" class="flex gap-2 mt-3">
                 <img
-                  v-for="m in milestone.media.filter((x) => x.mimeType?.startsWith('image/'))"
+                  v-for="m in imageList(milestone)"
                   :key="m.id"
-                  :src="m.url"
+                  :src="m.thumbUrl || m.url"
+                  width="80"
+                  height="80"
                   loading="lazy"
-                  class="w-20 h-20 object-cover rounded-lg"
+                  decoding="async"
+                  class="w-20 h-20 object-cover rounded-lg bg-gray-100"
                 />
               </div>
             </div>
@@ -158,6 +161,18 @@ const showForm = ref(false)
 const saving = ref(false)
 const editingId = ref(null)
 const selectedCategory = ref('')
+
+// 卡片只展示图片附件；过滤结果按 media 数组缓存，保持引用稳定，
+// 避免每次重渲染都生成新数组导致 v-for 重建全部 <img>（图片重新解码）。
+const imageCache = new WeakMap()
+function imageList(milestone) {
+  if (!milestone.media?.length) return []
+  const hit = imageCache.get(milestone)
+  if (hit && hit.src === milestone.media) return hit.list
+  const list = milestone.media.filter((x) => x.mimeType?.startsWith('image/'))
+  imageCache.set(milestone, { src: milestone.media, list })
+  return list
+}
 
 const form = reactive({
   title: '',

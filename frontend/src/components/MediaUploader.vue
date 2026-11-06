@@ -25,8 +25,12 @@
       >
         <img
           v-if="upload.mimeType?.startsWith('image/') && upload.url"
-          :src="upload.url"
-          class="w-11 h-11 rounded object-cover shrink-0"
+          :src="upload.thumbUrl || thumbOf(upload)"
+          width="44"
+          height="44"
+          loading="lazy"
+          decoding="async"
+          class="w-11 h-11 rounded object-cover shrink-0 bg-gray-100"
         />
         <div
           v-else-if="upload.mimeType?.startsWith('video/')"
@@ -87,6 +91,14 @@ const uploads = ref([])
 
 const accept = () => props.accept || 'image/*,video/mp4,video/webm'
 
+// 44px 的格子不该拉原图（单张可达数 MB）。接口没给 thumbUrl 时按同规则兜底拼一个，
+// 后端 /api/uploads 支持 ?w=64；万一生成失败会自动回落原图，不会裂图。
+function thumbOf(upload) {
+  if (!upload.url || !upload.mimeType?.startsWith('image/')) return upload.url
+  if (!upload.url.startsWith('/api/uploads/')) return upload.url
+  return `${upload.url}?w=64`
+}
+
 let keySeq = 0
 
 // 依据父传入的已有关联附件初始化列表
@@ -96,6 +108,7 @@ watch(
     uploads.value = (items || []).map((it) => ({
       id: it.id,
       url: it.url,
+      thumbUrl: it.thumbUrl || null,
       fileName: it.fileName,
       mimeType: it.mimeType,
       initial: true,
@@ -115,6 +128,7 @@ async function uploadFile(file) {
     const result = await uploadApi.upload(file)
     upload.id = result.id
     upload.url = result.url
+    upload.thumbUrl = result.thumbUrl || null
     upload.fileName = result.fileName || file.name
     upload.mimeType = result.mimeType || file.type
     upload.uploading = false

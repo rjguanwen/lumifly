@@ -3,7 +3,7 @@
     class="ua-round"
     :style="{ width: size + 'px', height: size + 'px', fontSize: Math.round(size * 0.42) + 'px' }"
   >
-    <img v-if="src" :src="src" :alt="name" class="ua-img" />
+    <img v-if="src" :src="imgSrc" :alt="name" :width="size" :height="size" decoding="async" class="ua-img" />
     <span v-else class="ua-char" :style="{ background: bg }">{{ (name || '?').charAt(0) }}</span>
   </div>
 </template>
@@ -25,6 +25,20 @@ const palettes = [
   'linear-gradient(135deg, #14b8a6, #8b5cf6)',
   'linear-gradient(135deg, #f97316, #ec4899)',
 ]
+
+// 头像按显示尺寸取缩略图：18px 的头像没必要下载 200KB 的原图。
+// 后端 /api/uploads 只接受白名单档位（32/64/128/256/512），这里就近向上取档，
+// 非 /api/uploads/ 来源（如外链、data URI）原样返回。
+const THUMB_STEPS = [32, 64, 128, 256, 512]
+const imgSrc = computed(() => {
+  const s = props.src
+  if (!s || !s.startsWith('/api/uploads/')) return s
+  // 2x DPR：显示 18px 需要 36 物理像素 → 取 64 档
+  const need = props.size * 2
+  const step = THUMB_STEPS.find((v) => v >= need) || THUMB_STEPS[THUMB_STEPS.length - 1]
+  const joined = s.includes('?') ? `${s}&w=${step}` : `${s}?w=${step}`
+  return joined
+})
 
 const bg = computed(() => {
   const s = props.name || '?'

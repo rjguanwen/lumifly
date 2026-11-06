@@ -103,7 +103,10 @@
             <img
               :src="postImgs(p)[0]"
               loading="lazy"
-              class="w-full aspect-[5/4] object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+              decoding="async"
+              width="512"
+              height="410"
+              class="w-full aspect-[5/4] object-cover bg-gray-100 transition-transform duration-300 group-hover:scale-[1.03]"
               alt=""
             />
             <span v-if="p.isNew" class="absolute left-2 top-2 px-1.5 py-0.5 rounded-md bg-rose-500 text-white text-[11px]">新</span>
@@ -344,8 +347,11 @@ watch(
       scrollEl = findScrollParent(sentinel.value)
       scrollEl.addEventListener('scroll', onNearBottom, { passive: true })
     }
-    // 列表不足一屏时也自动补页，保证能继续滚动加载
-    onNearBottom()
+    // 只在「内容撑不满视口、用户根本没法滚动」时才补一页。
+    // 原先这里无条件调 onNearBottom()，等于首屏后立刻再拉一页：
+    // 卡片数与封面图请求直接翻倍，全部挤在首屏带宽里。
+    const el = scrollEl === window ? document.documentElement : scrollEl
+    if (el.scrollHeight <= el.clientHeight + 320) loadMore()
   },
   { flush: 'post' },
 )

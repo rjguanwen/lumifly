@@ -72,8 +72,8 @@
             <div v-if="m.description" class="text-sm text-gray-700 prose prose-sm mt-1" v-html="m.description" />
             <div v-if="m.media?.length" class="mt-2 space-y-2">
               <template v-for="med in m.media" :key="med.id">
-                <img v-if="med.mimeType?.startsWith('image/')" :src="med.url" :alt="med.fileName" loading="lazy" class="w-full rounded-lg object-cover max-h-60 cursor-pointer hover:opacity-90 transition-opacity" @click.stop="openGallery(m.media, med.url)" />
-                <video v-else-if="med.mimeType?.startsWith('video/')" :src="med.url" controls class="w-full rounded-lg max-h-60" />
+                <img v-if="med.mimeType?.startsWith('image/')" :src="med.thumbUrl || med.url" :alt="med.fileName" loading="lazy" decoding="async" class="w-full rounded-lg object-cover max-h-60 bg-gray-100 cursor-pointer hover:opacity-90 transition-opacity" @click.stop="openGallery(m.media, med.url)" />
+                <video v-else-if="med.mimeType?.startsWith('video/')" :src="med.url" controls preload="metadata" class="w-full rounded-lg max-h-60" />
               </template>
             </div>
             <div class="flex justify-end mt-2">
@@ -129,10 +129,11 @@
           <template v-for="med in detailRecord.media" :key="med.id">
             <img
               v-if="med.mimeType?.startsWith('image/')"
-              :src="med.url"
+              :src="med.thumbUrl || med.url"
               :alt="med.fileName"
               loading="lazy"
-              class="w-full rounded-xl object-cover aspect-square cursor-pointer hover:opacity-90 transition-opacity"
+              decoding="async"
+              class="w-full rounded-xl object-cover aspect-square bg-gray-100 cursor-pointer hover:opacity-90 transition-opacity"
               @click="openGallery(detailRecord.media, med.url)"
             />
             <video v-else-if="med.mimeType?.startsWith('video/')" :src="med.url" controls class="w-full rounded-xl max-h-56" />

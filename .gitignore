@@ -38,6 +38,11 @@ backend-go/uploads/
 *.db-wal
 *.db-shm
 
+# 缩略图缓存（backend-go/uploads/.thumbs/，已被上面的 uploads/ 规则覆盖）
+# 这里显式列出是为了说明它的性质：**可再生**，删掉后首次访问会自动重建，
+# 所以永远不要把它当数据备份，也不要为了它调整上面 uploads/ 的忽略规则。
+.thumbs/
+
 # ===== 前端 =====
 node_modules/
 dist/

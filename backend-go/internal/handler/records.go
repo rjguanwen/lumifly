@@ -10,9 +10,15 @@ import (
 )
 
 // mediaJSON 输出媒体列表（含访问 URL）。
+// thumbUrl 为列表用的小缩略图地址（仅图片有值，非图片为 null）：
+// 前端列表/网格一律优先用它，不要再用 url —— url 是原图，单张可达数 MB。
 func mediaJSON(list []model.Media) []gin.H {
 	res := make([]gin.H, 0, len(list))
 	for _, m := range list {
+		var thumb interface{}
+		if t := thumbURLFor(m.MimeType, m.FilePath); t != "" {
+			thumb = t
+		}
 		res = append(res, gin.H{
 			"id":         m.ID,
 			"userId":     m.UserID,
@@ -24,6 +30,7 @@ func mediaJSON(list []model.Media) []gin.H {
 			"entityId":   m.EntityID,
 			"createdAt":  m.CreatedAt,
 			"url":        "/api/uploads/" + m.FilePath,
+			"thumbUrl":   thumb,
 		})
 	}
 	return res
@@ -137,6 +144,7 @@ func (h *Handler) ListRecords(c *gin.Context) {
 			"userId":     r.UserID,
 			"title":      r.Title,
 			"content":    r.Content,
+			"excerpt":    excerptOf(r.Content, 120),
 			"recordDate": r.RecordDate,
 			"mood":       r.Mood,
 			"weather":    r.Weather,

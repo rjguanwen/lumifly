@@ -79,6 +79,7 @@ func (h *Handler) ListIdeas(c *gin.Context) {
 			"userId":            it.UserID,
 			"title":             it.Title,
 			"content":           it.Content,
+			"excerpt":           excerptOf(it.Content, 160),
 			"linkedPlanId":      it.LinkedPlanID,
 			"linkedMilestoneId": it.LinkedMilestoneID,
 			"createdAt":         it.CreatedAt,

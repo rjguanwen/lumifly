@@ -133,16 +133,37 @@ func (h *Handler) moderateText(text string) (bool, []string) {
 	return true, cats
 }
 
-// GetModerationQueue 审核队列（待审核内容，按提交时间倒序）。
+// GetModerationQueue 审核队列（待审核内容，按提交时间倒序，分页）。
+//
+// 原先是一次性 Find 全部待审内容，且每条返回完整正文快照（含正文里的所有图片标签）——
+// 待审积压时单次响应可达数十 MB，审核页会长时间白屏。
+// 现在与广场流一致：默认每页 20、上限 50。审核需要看全文，故仍返回 content
+// （其中新快照的图片已带 ?w= 缩略图参数，见 contentWithMedia）。
 func (h *Handler) GetModerationQueue(c *gin.Context) {
 	cu := currentUser(c)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 50 {
+		limit = 20
+	}
+
+	base := h.db.Model(&model.Publication{}).Where("status = ?", model.PubStatusPending)
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		serverError(c, "查询失败")
+		return
+	}
+
 	var pubs []model.Publication
-	if err := h.db.Where("status = ?", model.PubStatusPending).Order("id DESC").Find(&pubs).Error; err != nil {
+	if err := base.Order("id DESC").Offset((page - 1) * limit).Limit(limit).Find(&pubs).Error; err != nil {
 		serverError(c, "查询失败")
 		return
 	}
 	items := h.pubItemsJSON(pubs, cu.ID)
-	c.JSON(200, gin.H{"items": items, "total": len(items)})
+	c.JSON(200, gin.H{"items": items, "total": total, "page": page, "limit": limit})
 }
 
 // ApprovePublication 审核通过。

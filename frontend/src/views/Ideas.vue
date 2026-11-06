@@ -38,11 +38,17 @@
             </div>
           </div>
 
-          <div v-if="idea.content" class="text-sm text-gray-600 prose prose-sm" v-html="idea.content" />
+          <p v-if="idea.excerpt || idea.content" class="text-sm text-gray-600 line-clamp-6 whitespace-pre-line">{{ idea.excerpt || '' }}</p>
           <div v-if="idea.media?.length" class="flex gap-2 flex-wrap mt-2">
             <template v-for="m in idea.media" :key="m.id">
-              <img v-if="m.mimeType?.startsWith('image/')" :src="m.url" loading="lazy" class="w-full rounded-lg object-cover max-h-48" />
-              <video v-else-if="m.mimeType?.startsWith('video/')" :src="m.url" controls class="w-full rounded-lg max-h-48" @click.stop />
+              <img
+                v-if="m.mimeType?.startsWith('image/')"
+                :src="m.thumbUrl || m.url"
+                loading="lazy"
+                decoding="async"
+                class="w-full rounded-lg object-cover max-h-48 bg-gray-100"
+              />
+              <video v-else-if="m.mimeType?.startsWith('video/')" :src="m.url" controls preload="metadata" class="w-full rounded-lg max-h-48" @click.stop />
             </template>
           </div>
           <div v-if="idea.tags?.length" class="flex gap-1 flex-wrap mt-2">

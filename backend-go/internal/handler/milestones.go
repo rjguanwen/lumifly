@@ -94,6 +94,7 @@ func (h *Handler) ListMilestones(c *gin.Context) {
 			"userId":      m.UserID,
 			"title":       m.Title,
 			"description": m.Description,
+			"excerpt":     excerptOf(m.Description, 120),
 			"eventDate":   m.EventDate,
 			"endDate":     m.EndDate,
 			"category":    m.Category,

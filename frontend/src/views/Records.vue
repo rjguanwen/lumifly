@@ -41,15 +41,19 @@
               </el-tag>
             </div>
             <h3 v-if="record.title" class="text-lg font-medium text-gray-900 mb-1">{{ record.title }}</h3>
-            <div v-if="record.content" class="text-gray-600 text-sm line-clamp-3 prose prose-sm" v-html="record.content" />
+            <p v-if="record.excerpt || record.content" class="text-gray-600 text-sm line-clamp-3">{{ record.excerpt || '（无正文内容）' }}</p>
             <div v-else class="text-gray-400 text-sm">（无正文内容）</div>
-            <div v-if="record.media?.length" class="flex gap-2 mt-3">
+            <div v-if="imageList(record).length" class="flex gap-2 mt-3">
               <img
-                v-for="m in record.media.filter((x) => x.mimeType?.startsWith('image/'))"
+                v-for="m in imageList(record)"
                 :key="m.id"
-                :src="m.url"
+                :src="m.thumbUrl || m.url"
+                width="64"
+                height="64"
                 loading="lazy"
-                class="w-16 h-16 object-cover rounded-lg"
+                decoding="async"
+                :fetchpriority="firstPage ? 'high' : 'low'"
+                class="w-16 h-16 object-cover rounded-lg bg-gray-100"
               />
             </div>
           </div>
@@ -121,7 +125,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import RichTextEditor from '../components/RichTextEditor.vue'
@@ -140,6 +144,19 @@ const showForm = ref(false)
 const saving = ref(false)
 const editingId = ref(null)
 
+// 卡片只展示图片附件。把过滤结果按 record.id 缓存一次：
+// 模板里若写 record.media.filter(...)，每次重渲染都会重新生成数组，
+// 进而让 v-for 认为列表变了、重建全部 <img>（图片重新解码）。缓存后引用稳定。
+const imageCache = new WeakMap()
+function imageList(record) {
+  if (!record.media?.length) return []
+  const hit = imageCache.get(record)
+  if (hit && hit.src === record.media) return hit.list
+  const list = record.media.filter((x) => x.mimeType?.startsWith('image/'))
+  imageCache.set(record, { src: record.media, list })
+  return list
+}
+
 const form = reactive({
   title: '',
   content: '',
@@ -152,6 +169,8 @@ const form = reactive({
 })
 
 // 分页滚动加载：整页刷新调用 load()，滚动到底由内部自动追加下一页
+// firstPage：前 pageSize 条（首屏）用 high 优先级加载图片，后续追加页用 low，
+// 避免滚动加载把首屏图片的带宽抢走。
 const { items, total, loading, loaded, sentinel, load } = useInfiniteScroll(
   (params) =>
     recordApi.list({
@@ -161,6 +180,10 @@ const { items, total, loading, loaded, sentinel, load } = useInfiniteScroll(
     }),
   { pageSize: 30 },
 )
+
+// 首屏判定：前 pageSize 条视为首屏。用 count 而不是下标，避免模板里每张卡片都做比较。
+const FIRST_PAGE_SIZE = 30
+const firstPage = computed(() => items.value.length <= FIRST_PAGE_SIZE)
 
 // 发布到广场状态：一次拉取我发布的随记，本地映射（列表变化自动刷新）
 const {
